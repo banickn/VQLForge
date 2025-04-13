@@ -1,0 +1,38 @@
+version: '3.8' # Specify docker-compose version
+
+services:
+  backend:
+    build: ./backend         # Path to the backend Dockerfile directory
+    container_name: vqlforge-backend
+    # ports: # Optional: Expose port directly only if needed for debugging
+    #   - "8001:8000"        # Map host port 8001 to container port 8000
+    volumes:
+      # Mount source code for development (enables hot-reloading with uvicorn --reload)
+      # Comment out or use a different compose file for production
+      - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    user: appuser
+
+  frontend:
+    build: ./frontend        # Path to the frontend Dockerfile directory
+    container_name: vqlforge-frontend
+    ports:
+      - "80:80"              # Map host port 80 to container port 80 (Nginx)
+    depends_on:
+      - backend             # Ensures backend starts before frontend (doesn't guarantee readiness)
+
+# --- Optional: Add other services like a database ---
+# db:
+#   image: postgres:15-alpine
+#   container_name: myapp-db
+#   volumes:
+#     - postgres_data:/var/lib/postgresql/data/
+#   environment:
+#     - POSTGRES_USER=user
+#     - POSTGRES_PASSWORD=password
+#     - POSTGRES_DB=mydatabase
+#   ports: # Optional: Expose only if needed for direct access
+#     - "5432:5432"
+
+# volumes: # Define named volumes if using a database
+#   postgres_data:

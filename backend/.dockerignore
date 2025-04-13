@@ -1,0 +1,9 @@
+# .dockerignore (in ./backend directory)
+.venv
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+# Add any other files/folders specific to your project
+# that shouldn't be copied into the Docker image
