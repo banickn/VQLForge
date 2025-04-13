@@ -259,7 +259,7 @@ function App() {
 
              {/* --- Footer --- */}
              <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="caption" color="text.secondary">VQLForge 1.0 - <a href="YOUR_GITHUB_REPO_LINK_HERE" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
+                <Typography variant="caption" color="text.secondary">VQLForge 1.0 - <a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
                    MIT License
                   </a>
                 </Typography>
