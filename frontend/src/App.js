@@ -7,10 +7,10 @@ import {
     Container,
     // Grid, // No longer using Grid for the main layout row
     Box,
-    Select,
-    MenuItem,
-    FormControl,
-    InputLabel,
+    // Select, // Replaced by Autocomplete
+    // MenuItem, // No longer needed for Autocomplete options
+    // FormControl, // Autocomplete handles its own structure
+    // InputLabel, // TextField inside Autocomplete handles label
     Button,
     CircularProgress,
     Card,
@@ -21,6 +21,8 @@ import {
     IconButton,
     Stack,
     useTheme,
+    Autocomplete, // Import Autocomplete
+    TextField,    // Import TextField for Autocomplete's input
 } from '@mui/material';
 import DoubleArrowIcon from '@mui/icons-material/DoubleArrow';
 import VerifiedIcon from '@mui/icons-material/Verified';
@@ -30,16 +32,28 @@ import { sql } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import CloseIcon from '@mui/icons-material/Close';
-import { purple, red, grey, blueGrey } from '@mui/material/colors';
+import { purple, blueGrey } from '@mui/material/colors';
 // import GradientIcon from './components/GradientIcon';
 
 // --- Configuration ---
-const availableDialects = [ { value: 'athena', label: 'Athena' }, { value: 'bigquery', label: 'BigQuery' }, { value: 'clickhouse', label: 'ClickHouse' }, { value: 'databricks', label: 'Databricks' }, { value: 'doris', label: 'Doris' }, { value: 'drill', label: 'Drill' }, { value: 'druid', label: 'Druid' }, { value: 'duckdb', label: 'DuckDB' }, { value: 'dune', label: 'Dune' }, { value: 'hive', label: 'Hive' }, { value: 'materialize', label: 'Materialize' }, { value: 'mysql', label: 'MySQL' }, { value: 'oracle', label: 'Oracle' }, { value: 'postgres', label: 'PostgreSQL' }, { value: 'presto', label: 'Presto' }, { value: 'prql', label: 'PRQL' }, { value: 'redshift', label: 'Redshift' }, { value: 'risingwave', label: 'RisingWave' }, { value: 'snowflake', label: 'Snowflake' }, { value: 'spark', label: 'Spark SQL' }, { value: 'spark2', label: 'Spark SQL 2' }, { value: 'sqlite', label: 'SQLite' }, { value: 'starrocks', label: 'StarRocks' }, { value: 'tableau', label: 'Tableau' }, { value: 'teradata', label: 'Teradata' }, { value: 'trino', label: 'Trino' } ];
+const availableDialects = [{ value: 'athena', label: 'Athena' }, { value: 'bigquery', label: 'BigQuery' }, { value: 'clickhouse', label: 'ClickHouse' }, { value: 'databricks', label: 'Databricks' }, { value: 'doris', label: 'Doris' }, { value: 'drill', label: 'Drill' }, { value: 'druid', label: 'Druid' }, { value: 'duckdb', label: 'DuckDB' }, { value: 'dune', label: 'Dune' }, { value: 'hive', label: 'Hive' }, { value: 'materialize', label: 'Materialize' }, { value: 'mysql', label: 'MySQL' }, { value: 'oracle', label: 'Oracle' }, { value: 'postgres', label: 'PostgreSQL' }, { value: 'presto', label: 'Presto' }, { value: 'prql', label: 'PRQL' }, { value: 'redshift', label: 'Redshift' }, { value: 'risingwave', label: 'RisingWave' }, { value: 'snowflake', label: 'Snowflake' }, { value: 'spark', label: 'Spark SQL' }, { value: 'spark2', label: 'Spark SQL 2' }, { value: 'sqlite', label: 'SQLite' }, { value: 'starrocks', label: 'StarRocks' }, { value: 'tableau', label: 'Tableau' }, { value: 'teradata', label: 'Teradata' }, { value: 'trino', label: 'Trino' }];
 const editorExtensions = [sql()];
+
+// --- Placeholder VDB Options ---
+const availableVDBs = [
+    { value: 'vdb_placeholder_1', label: 'VDB Option 1' },
+    { value: 'vdb_placeholder_2', label: 'VDB Option 2' },
+    { value: 'vdb_placeholder_3', label: 'VDB Option 3' },
+];
+
 
 function App() {
     const theme = useTheme();
-    const [sourceDialect, setSourceDialect] = useState(availableDialects[0].value);
+    const API_BASE_URL = ''; // Calls go to the same origin as the frontend
+    // --- State adjustments for Autocomplete ---
+    const [sourceDialect, setSourceDialect] = useState(availableDialects[0]); // Store the whole object
+    const [selectedVDB, setSelectedVDB] = useState(availableVDBs[0]); // Store the whole object
+
     const [sourceSql, setSourceSql] = useState('SELECT\n    c.customer_id,\n    c.name,\n    COUNT(o.order_id) AS total_orders\nFROM\n    customers c\nLEFT JOIN\n    orders o ON c.customer_id = o.customer_id\nWHERE\n    c.signup_date >= \'2023-01-01\'\nGROUP BY\n    c.customer_id, c.name\nHAVING\n    COUNT(o.order_id) > 5\nORDER BY\n    total_orders DESC\nLIMIT 10;');
     const [targetSql, setTargetSql] = useState('-- Target SQL will appear here after conversion...');
     const [isLoading, setIsLoading] = useState(false);
@@ -49,7 +63,7 @@ function App() {
     const [aiError, setAiError] = useState('');
     const [isValidating, setIsValidating] = useState(false);
     const [validationResult, setValidationResult] = useState(null);
-
+    const initialTargetSqlPlaceholder = '-- Target SQL will appear here after conversion...';
     const clearAiState = () => { setAiSuggestion(''); setAiError(''); };
     const clearValidationState = () => { setValidationResult(null); };
 
@@ -58,16 +72,36 @@ function App() {
         setError(''); clearAiState(); clearValidationState();
     }, []);
 
-    const handleDialectChange = (event) => {
-        setSourceDialect(event.target.value);
+    // --- Autocomplete onChange handlers ---
+    const handleDialectChange = (event, newValue) => {
+        // newValue is the selected option object (or null if cleared)
+        setSourceDialect(newValue);
         setError(''); clearAiState(); clearValidationState();
     };
 
+    const handleVDBChange = (event, newValue) => {
+        // newValue is the selected option object (or null if cleared)
+        setSelectedVDB(newValue);
+        // Optionally clear state if changing VDB should reset things
+        setError(''); clearAiState(); clearValidationState(); setTargetSql('-- Target SQL will appear here after conversion...');
+    };
+    // --- End Autocomplete onChange handlers ---
+
     const handleConvert = async () => {
         setIsLoading(true); setError(''); clearAiState(); clearValidationState(); setTargetSql('');
-        const requestBody = { sql: sourceSql, dialect: sourceDialect };
+        // --- Access .value property from state objects ---
+        if (!sourceDialect || !selectedVDB) {
+            setError("Source Dialect and VDB must be selected.");
+            setIsLoading(false);
+            return; // Basic validation
+        }
+        const requestBody = {
+            sql: sourceSql,
+            dialect: sourceDialect.value, // Access the value property
+            vdb: selectedVDB.value // Include selected VDB in the request
+        };
         try {
-            const response = await fetch(`/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(requestBody) });
+            const response = await fetch(`${API_BASE_URL}/api/translate`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(requestBody) });
             if (!response.ok) {
                 let errorDetails = ''; let errorMessage = `Request failed: ${response.status}`;
                 try {
@@ -76,7 +110,7 @@ function App() {
                         const errorData = JSON.parse(errorDetails); errorMessage = errorData.detail || errorData.error || errorData.message || JSON.stringify(errorData);
                     } else if (errorDetails) { errorMessage = errorDetails; }
                 } catch (parseError) { try { const textError = await response.text(); if (textError) errorMessage = textError; } catch (readError) { /* ignore */ } console.error("Error parsing error:", parseError); }
-                 if (!errorMessage.toLowerCase().includes(response.status.toString())) { errorMessage = `(${response.status}) ${errorMessage}`; }
+                if (!errorMessage.toLowerCase().includes(response.status.toString())) { errorMessage = `(${response.status}) ${errorMessage}`; }
                 throw new Error(errorMessage);
             }
             const data = await response.json();
@@ -87,32 +121,134 @@ function App() {
     };
 
     const handleSendErrorToAI = async () => {
-         if (!error) return; setIsAiLoading(true); setAiSuggestion(''); setAiError(''); clearValidationState();
+        if (!error) return; setIsAiLoading(true); setAiSuggestion(''); setAiError(''); clearValidationState();
         try {
             await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate delay
+            /* --- Use label property for display --- */
+            if (!sourceDialect) { // Add check
+                throw new Error("Cannot analyze error without a selected Source Dialect.");
+            }
             if (error.toLowerCase().includes('network') || error.toLowerCase().includes('unreachable')) { throw new Error("AI Service Unreachable."); }
-            else if (error.toLowerCase().includes('syntax error')) { setAiSuggestion(`AI: Check syntax for ${getDialectLabel(sourceDialect)} near the error location.`); }
-            else if (error.toLowerCase().includes('invalid table')) { setAiSuggestion(`AI: Verify table names and permissions in ${getDialectLabel(sourceDialect)}.`); }
+            else if (error.toLowerCase().includes('syntax error')) { setAiSuggestion(`AI: Check syntax for ${sourceDialect.label} near the error location.`); }
+            else if (error.toLowerCase().includes('invalid table')) { setAiSuggestion(`AI: Verify table names and permissions in ${sourceDialect.label}.`); }
             else { setAiSuggestion(`AI Suggestion for "${error}": Review common patterns or docs.`); }
         } catch (aiApiError) { setAiError(`AI Error: ${aiApiError.message}`); }
         finally { setIsAiLoading(false); }
     };
 
     const handleValidateQuery = async () => {
-         if (!sourceSql.trim() || error || isLoading || isAiLoading || isValidating) return; setIsValidating(true); clearValidationState(); clearAiState();
+        // Initial checks - ensure SQL, dialect, and VDB are present and no other operations are running
+        if (!sourceSql.trim() || !sourceDialect || !selectedVDB || isLoading || isAiLoading || isValidating) {
+            if (!sourceDialect) console.error("Validation attempt without source dialect selected.");
+            if (!selectedVDB) console.error("Validation attempt without VDB selected.");
+            return;
+        }
+
+        setIsValidating(true);
+        clearValidationState(); // Clear previous validation results
+        clearAiState();       // Clear any AI suggestions/errors
+
+        let vqlToValidate = '';
+
         try {
-            await new Promise(resolve => setTimeout(resolve, 1200)); // Simulate delay
-            if (sourceSql.toLowerCase().includes('invalid_column_name')) { throw new Error(`Column 'invalid_column_name' not found in ${getDialectLabel(sourceDialect)}.`); }
-            else if (sourceSql.toLowerCase().includes('invalid_table_name')) { throw new Error(`Table 'invalid_table_name' does not exist in ${getDialectLabel(sourceDialect)}.`); }
-            else if (sourceSql.toLowerCase().includes('syntax_error_validate')) { throw new Error(`Syntax error near 'syntax_error_validate' in ${getDialectLabel(sourceDialect)}.`); }
-            else if (sourceSql.toLowerCase().includes('permission_denied')) { throw new Error(`Permission denied in ${getDialectLabel(sourceDialect)}.`); }
-            else { setValidationResult({ status: 'success', message: `Query syntax valid for ${getDialectLabel(sourceDialect)}.` }); }
-        } catch (validationErr) { console.error("Validation failed:", validationErr); setValidationResult({ status: 'error', message: `${validationErr.message}` }); }
-        finally { setIsValidating(false); }
+            // --- Check if Translation is Needed ---
+            const needsTranslation = !targetSql || targetSql.trim() === '' || targetSql === initialTargetSqlPlaceholder;
+
+            if (needsTranslation) {
+                console.log("Validation: Target VQL is empty or placeholder. Performing translation first...");
+                // --- Step 1a: Translate the SQL to VQL ---
+                const translateRequestBody = {
+                    sql: sourceSql,
+                    dialect: sourceDialect.value,
+                    vdb: selectedVDB.value
+                };
+                const translateResponse = await fetch(`${API_BASE_URL}/api/translate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(translateRequestBody)
+                });
+
+                if (!translateResponse.ok) {
+                    let errorDetails = '';
+                    let errorMessage = `Translation failed before validation: ${translateResponse.status}`;
+                    try {
+                        errorDetails = await translateResponse.text();
+                        if (errorDetails && errorDetails.startsWith('{') && errorDetails.endsWith('}')) {
+                            const errorData = JSON.parse(errorDetails);
+                            errorMessage = errorData.detail || errorData.error || errorData.message || JSON.stringify(errorData);
+                        } else if (errorDetails) {
+                            errorMessage = errorDetails;
+                        }
+                        if (!errorMessage.toLowerCase().includes(translateResponse.status.toString())) {
+                            errorMessage = `(${translateResponse.status}) ${errorMessage}`;
+                        }
+                    } catch (parseError) {
+                        console.error("Error parsing translation error response:", parseError);
+                    }
+                    throw new Error(errorMessage);
+                }
+
+                const translateData = await translateResponse.json();
+                if (!translateData || typeof translateData.vql !== 'string') {
+                    console.error("Invalid VQL received from translation:", translateData);
+                    throw new Error("Failed to get valid VQL from translation step.");
+                }
+                vqlToValidate = translateData.vql;
+                // Update the target editor state since we just translated
+                setTargetSql(vqlToValidate);
+                console.log("Validation: Translation successful. Using newly translated VQL.");
+
+            } else {
+                // --- Step 1b: Use Existing VQL ---
+                console.log("Validation: Using existing VQL from the target editor.");
+                vqlToValidate = targetSql; // Use the content already in the state/editor
+            }
+
+            // --- Prepare VQL (Remove Line Breaks) ---
+            const vqlWithoutLineBreaks = vqlToValidate.replace(/[\r\n]+/g, ' ');
+
+            // --- Step 2: Validate the VQL ---
+            const validateRequestBody = {
+                sql: "somestring",
+                vql: vqlWithoutLineBreaks // Send the prepared VQL (either newly translated or existing)
+            };
+            const validateResponse = await fetch(`${API_BASE_URL}/api/validate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify(validateRequestBody)
+            });
+
+            // --- Step 3: Process Validation Response ---
+            const validationData = await validateResponse.json();
+
+            if (!validateResponse.ok) {
+                console.error("Validation request failed:", validateResponse.status, validationData);
+                const errorMessage = validationData?.detail || validationData?.error || `Validation request failed: ${validateResponse.status}`;
+                setValidationResult({ status: 'error', message: errorMessage });
+            } else {
+                console.log("Validation Step 3: Response received:", validationData);
+                if (validationData.validated) {
+                    setValidationResult({ status: 'success', message: `VQL was successfully validated with Denodo VDP!` });
+                } else {
+                    setValidationResult({ status: 'error', message: `Validation Failed: ${validationData.error || 'Denodo rejected the query plan.'}` });
+                }
+            }
+
+        } catch (err) {
+            console.error("Validation process error:", err);
+            setValidationResult({
+                status: 'error',
+                message: err.message.includes("Translation failed")
+                    ? err.message // Specific translation error
+                    : `Validation Process Error: ${err.message || 'Unknown error occurred.'}`
+            });
+        } finally {
+            setIsValidating(false);
+            console.log("Validation process finished.");
+        }
     };
 
-    const getDialectLabel = (value) => availableDialects.find(d => d.value === value)?.label || value;
-    const alertCloseButton = (onCloseHandler) => ( <IconButton aria-label="close" color="inherit" size="small" onClick={onCloseHandler}><CloseIcon fontSize="inherit" /></IconButton> );
+    const alertCloseButton = (onCloseHandler) => (<IconButton aria-label="close" color="inherit" size="small" onClick={onCloseHandler}><CloseIcon fontSize="inherit" /></IconButton>);
     const anyLoading = isLoading || isAiLoading || isValidating;
 
     // --- Define fixed widths ---
@@ -146,26 +282,36 @@ function App() {
             <CssBaseline />
             <AppBar position="static" elevation={2} sx={{ background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.dark} 100%)`, flexShrink: 0 }}>
                 <Toolbar>
-                    <WhatshotIcon sx={{ mr: -2.3, fontSize: '2.5rem',zIndex: 1, transform: 'rotate(-90deg)', color: theme.palette.secondary.dark }} />
-                    <DoubleArrowIcon sx={{ mr: 0, fontSize: '2.6rem',zIndex: 2, color: theme.palette.primary.light }} />
+                    <WhatshotIcon sx={{ mr: -2.3, fontSize: '2.5rem', zIndex: 1, transform: 'rotate(-90deg)', color: theme.palette.secondary.dark }} />
+                    <DoubleArrowIcon sx={{ mr: 0, fontSize: '2.6rem', zIndex: 2, color: theme.palette.primary.light }} />
                     <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 600 }}>VQLForge</Typography>
                 </Toolbar>
             </AppBar>
 
             <Container maxWidth="xl" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                 {/* --- Notifications Area --- */}
-                 <Stack spacing={2} sx={{ mb: 3, flexShrink: 0 }}>
+                <Stack spacing={2} sx={{ mb: 3, flexShrink: 0 }}>
                     {/* Error Alerts */}
-                    {error && ( <Alert severity="error" onClose={() => { setError(''); clearAiState(); clearValidationState(); }} action={alertCloseButton(() => { setError(''); clearAiState(); clearValidationState(); })}> <AlertTitle sx={{ fontWeight: 600 }}>Conversion Error</AlertTitle> {error} </Alert> )}
-                    {aiError && ( <Alert severity="warning" onClose={() => setAiError('')} action={alertCloseButton(() => setAiError(''))}> <AlertTitle sx={{ fontWeight: 600 }}>AI Analysis Error</AlertTitle> {aiError} </Alert> )}
-                    {validationResult?.status === 'error' && ( <Alert severity="warning" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}> <AlertTitle sx={{ fontWeight: 600 }}>Validation Failed</AlertTitle> {validationResult.message} </Alert> )}
-
+                    {error && (<Alert severity="error" onClose={() => { setError(''); clearAiState(); clearValidationState(); }} action={alertCloseButton(() => { setError(''); clearAiState(); clearValidationState(); })}> <AlertTitle sx={{ fontWeight: 600 }}>Conversion Error</AlertTitle> {error} </Alert>)}
+                    {aiError && (<Alert severity="warning" onClose={() => setAiError('')} action={alertCloseButton(() => setAiError(''))}> <AlertTitle sx={{ fontWeight: 600 }}>AI Analysis Error</AlertTitle> {aiError} </Alert>)}
+                    {validationResult?.status === 'error' && (
+                        <Alert severity="warning" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}>
+                            <AlertTitle sx={{ fontWeight: 600 }}>Validation Failed</AlertTitle>
+                            {validationResult.message}
+                        </Alert>
+                    )}
+                    {validationResult?.status === 'success' && (
+                        <Alert severity="success" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}>
+                            <AlertTitle sx={{ fontWeight: 600 }}>Validation Successful</AlertTitle>
+                            {validationResult.message}
+                        </Alert>
+                    )}
                     {/* AI Button (conditional) */}
-                    {error && !aiSuggestion && !aiError && ( <Box sx={{ display: 'flex', justifyContent: 'flex-start', position: 'relative', width: 'fit-content' }}> <Button variant="outlined" color="secondary" size="small" onClick={handleSendErrorToAI} disabled={anyLoading} startIcon={!isAiLoading ? <AutoFixHighIcon /> : null} sx={{ textTransform: 'none', fontWeight: 600 }}> {isAiLoading ? 'Analyzing...' : 'Get AI Suggestion'} </Button> {isAiLoading && ( <CircularProgress size={20} color="secondary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-10px', marginLeft: '-10px' }} /> )} </Box> )}
+                    {error && !aiSuggestion && !aiError && (<Box sx={{ display: 'flex', justifyContent: 'flex-start', position: 'relative', width: 'fit-content' }}> <Button variant="outlined" color="secondary" size="small" onClick={handleSendErrorToAI} disabled={anyLoading} startIcon={!isAiLoading ? <AutoFixHighIcon /> : null} sx={{ textTransform: 'none', fontWeight: 600 }}> {isAiLoading ? 'Analyzing...' : 'Get AI Suggestion'} </Button> {isAiLoading && (<CircularProgress size={20} color="secondary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-10px', marginLeft: '-10px' }} />)} </Box>)}
 
                     {/* Info/Success Alerts */}
-                    {aiSuggestion && !aiError && ( <Alert severity="info" onClose={() => setAiSuggestion('')} action={alertCloseButton(() => setAiSuggestion(''))}> <AlertTitle sx={{ fontWeight: 600 }}>AI Suggestion</AlertTitle> {aiSuggestion} </Alert> )}
-                    {validationResult?.status === 'success' && ( <Alert severity="success" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}> <AlertTitle sx={{ fontWeight: 600 }}>Validation Successful</AlertTitle> {validationResult.message} </Alert> )}
+                    {aiSuggestion && !aiError && (<Alert severity="info" onClose={() => setAiSuggestion('')} action={alertCloseButton(() => setAiSuggestion(''))}> <AlertTitle sx={{ fontWeight: 600 }}>AI Suggestion</AlertTitle> {aiSuggestion} </Alert>)}
+                    {/* {validationResult?.status === 'success' && (<Alert severity="success" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}> <AlertTitle sx={{ fontWeight: 600 }}>Validation Successful</AlertTitle> {validationResult.message} </Alert>)} */}
                 </Stack>
 
                 {/* --- Editors and Controls using Flexbox --- */}
@@ -189,7 +335,8 @@ function App() {
                         }}
                     >
                         {renderEditorCard(
-                            `Source (${getDialectLabel(sourceDialect)})`,
+                            /* --- Use label property for display --- */
+                            `Source (${sourceDialect ? sourceDialect.label : 'Select Dialect'})`,
                             theme.palette.primary.main,
                             sourceSql,
                             false, // Not read-only by default
@@ -211,27 +358,48 @@ function App() {
                             flexShrink: 0,               // Prevent shrinking
                         }}
                     >
-                        <FormControl fullWidth>
-                            <InputLabel id="source-dialect-label">Source Dialect</InputLabel>
-                            <Select labelId="source-dialect-label" id="source-dialect-select" value={sourceDialect} label="Source Dialect" onChange={handleDialectChange} disabled={anyLoading}>
-                                {availableDialects.map((dialect) => ( <MenuItem key={dialect.value} value={dialect.value}> {dialect.label} </MenuItem> ))}
-                            </Select>
-                        </FormControl>
+                        {/* --- Source Dialect Autocomplete --- */}
+                        <Autocomplete
+                            disablePortal // Or true, depending on desired dropdown behavior
+                            id="source-dialect-autocomplete"
+                            options={availableDialects}
+                            getOptionLabel={(option) => option.label || ""} // How to display options
+                            value={sourceDialect} // Controlled component: use the state object
+                            onChange={handleDialectChange} // Use the updated handler
+                            isOptionEqualToValue={(option, value) => option.value === value?.value} // How to compare option object with value object
+                            disabled={anyLoading}
+                            fullWidth
+                            renderInput={(params) => <TextField {...params} label="Source Dialect" />}
+                        />
+
+                        {/* --- VDB Autocomplete --- */}
+                        <Autocomplete
+                            disablePortal
+                            id="vdb-autocomplete"
+                            options={availableVDBs}
+                            getOptionLabel={(option) => option.label || ""}
+                            value={selectedVDB}
+                            onChange={handleVDBChange}
+                            isOptionEqualToValue={(option, value) => option.value === value?.value}
+                            disabled={anyLoading}
+                            fullWidth
+                            renderInput={(params) => <TextField {...params} label="VDB" />}
+                        />
 
                         <Box sx={{ position: 'relative', width: '100%' }}>
-                            <Button variant="contained" color="secondary" onClick={handleConvert} disabled={!sourceSql.trim() || anyLoading} startIcon={!isLoading ? <DoubleArrowIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600 }}>
+                            <Button variant="contained" color="secondary" onClick={handleConvert} disabled={!sourceSql.trim() || !sourceDialect || !selectedVDB || anyLoading} startIcon={!isLoading ? <DoubleArrowIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600 }}>
                                 {isLoading ? 'Converting...' : 'Convert'}
                             </Button>
-                            {isLoading && ( <CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} /> )}
+                            {isLoading && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
                         </Box>
 
                         {!error && (
-                             <Box sx={{ position: 'relative', width: '100%' }}>
-                                <Button variant="outlined" color="primary" onClick={handleValidateQuery} disabled={!sourceSql.trim() || anyLoading} startIcon={!isValidating ? <VerifiedIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600, textTransform: 'none' }}>
+                            <Box sx={{ position: 'relative', width: '100%' }}>
+                                <Button variant="outlined" color="primary" onClick={handleValidateQuery} disabled={!sourceSql.trim() || !sourceDialect || anyLoading} startIcon={!isValidating ? <VerifiedIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600, textTransform: 'none' }}>
                                     {isValidating ? 'Validating...' : 'Validate Query'}
                                 </Button>
-                                {isValidating && ( <CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} /> )}
-                             </Box>
+                                {isValidating && (<CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                            </Box>
                         )}
                     </Box>
 
@@ -247,9 +415,9 @@ function App() {
                             flexShrink: 0,               // Prevent shrinking absolutely
                         }}
                     >
-                         {renderEditorCard(
+                        {renderEditorCard(
                             "Target (VQL)",
-                            'purple', // Example color
+                            purple[500], // Use a color from the imported palette
                             targetSql,
                             true // Always read-only
                         )}
@@ -257,11 +425,11 @@ function App() {
                 </Box> {/* End Flexbox Row */}
             </Container>
 
-             {/* --- Footer --- */}
-             <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* --- Footer --- */}
+            <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Typography variant="caption" color="text.secondary">VQLForge 1.0 - <a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
-                   MIT License
-                  </a>
+                    MIT License
+                </a>
                 </Typography>
             </Box>
         </Box>
