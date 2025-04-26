@@ -1,0 +1,85 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    branches:
+      - main # Push 'latest' tag on merge to main
+    tags:
+      - 'v*.*.*' # Push version tags (e.g., v1.0.0)
+  pull_request:
+    branches:
+      - main # Build only on PRs to main
+
+# Use environment variables to make image names configurable
+env:
+  REGISTRY: ghcr.io
+  # Uses github.repository_owner which is your username or org name
+  BACKEND_IMAGE_NAME: ${{ github.repository_owner }}/vqlforge-backend
+  FRONTEND_IMAGE_NAME: ${{ github.repository_owner }}/vqlforge-frontend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    # Grant permissions to write packages (required for GHCR push)
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          # GITHUB_TOKEN is automatically generated and available
+          # It has permissions to push to GHCR within the same repository/organization
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Build and Push Backend ---
+      - name: Extract metadata (tags, labels) for Backend
+        id: meta_backend # Give it a unique ID
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}
+          # Generates tags based on event:
+          # - main branch: latest, sha-<commit_sha>
+          # - git tag (v1.2.3): 1.2.3, latest, sha-<commit_sha>
+          # Add other tag patterns if needed
+
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Assumes Dockerfile.backend is in the root
+          # If Dockerfile.backend is in ./backend directory:
+          # context: ./backend
+          file: ./backend/Dockerfile 
+          # Only push if the event is NOT a pull request
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_backend.outputs.tags }}
+          labels: ${{ steps.meta_backend.outputs.labels }}
+          cache-from: type=gha # Enable build cache from GitHub Actions
+          cache-to: type=gha,mode=max # Write build cache back to GitHub Actions
+
+      # --- Build and Push Frontend ---
+      - name: Extract metadata (tags, labels) for Frontend
+        id: meta_frontend # Give it a unique ID
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: . # Assumes Dockerfile.frontend is in the root
+          # If Dockerfile.frontend is in ./frontend directory:
+          # context: ./frontend
+          file: ./frontend/Dockerfile 
+          # Only push if the event is NOT a pull request
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_frontend.outputs.tags }}
+          labels: ${{ steps.meta_frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
