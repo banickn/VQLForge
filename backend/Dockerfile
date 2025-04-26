@@ -1,28 +1,35 @@
 # backend/Dockerfile
+
+# Use a lightweight official Python image
 FROM python:3.12-slim
-WORKDIR /app
+
+# Create a non-root user
 RUN useradd --create-home --shell /bin/bash appuser
-RUN pip install --no-cache-dir uv # Install uv tool
+# Set working directory
+WORKDIR /app
 
-# Copy files needed for dependency installation AND build metadata/source
-# Run as root by default
-COPY pyproject.toml uv.lock* README.md main.py ./
-COPY sqlglot-vql /tmp/sqlglot_src 
-# Copy custom sqlglot source
-# If you had a src layout, copy src/ directory too:
-# COPY src ./src
-RUN uv pip install --system --no-cache . /tmp/sqlglot_src
+# Copy files needed for dependency installation
+#COPY pyproject.toml uv.lock* README.md ./
 
-# Install dependencies and the local project (.) globally using --system
-# This runs as root, so it has permission to write to /usr/local/lib/...
+# Install uv package manager
+RUN pip install --no-cache-dir uv
+
+# Copy custom sqlglot dependency source
+COPY sqlglot-vql /tmp/sqlglot_src
+COPY --chown=appuser:appuser pyproject.toml uv.lock* README.md main.py api.py test.py ./
+# Install project dependencies and custom dependency
+RUN uv pip install --system --no-cache-dir . /tmp/sqlglot_src
+
 RUN uv pip install --system --no-cache .
+# Clean up temporary source
+RUN rm -rf /tmp/sqlglot_src
 
-# Now copy the rest of the application code
-# Use '--chown' to ensure the appuser owns the files it will run
+# Copy application code with ownership set to appuser
 COPY --chown=appuser:appuser . .
 
-# Switch to the non-root user *before* running the application
+# Switch to non-root user for subsequent commands
 USER appuser
 
+# Expose the application port
 EXPOSE 8000
-# CMD/command specified in docker-compose.yml
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
