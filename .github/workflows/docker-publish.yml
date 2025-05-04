@@ -50,6 +50,9 @@ jobs:
           # - git tag (v1.2.3): 1.2.3, latest, sha-<commit_sha>
           # Add other tag patterns if needed
 
+      - name: List backend contents for debugging
+        run: ls -la ./backend 
+
       - name: Build and push Backend image
         uses: docker/build-push-action@v5
         with:

@@ -15,7 +15,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 # Copy custom sqlglot dependency source
-COPY ./sqlglot-vql /tmp/sqlglot_src
+COPY sqlglot-vql /tmp/sqlglot_src
 
 # Copy application files using explicit relative paths
 COPY --chown=appuser:appuser ./pyproject.toml ./uv.lock* ./README.md ./main.py ./

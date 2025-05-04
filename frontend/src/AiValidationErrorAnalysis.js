@@ -88,16 +88,6 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                     </Typography>
                 </Box>
 
-                {/* Explanation (Placed before suggestion for validation) */}
-                <Box mb={2}>
-                    <Typography variant="body2" color="text.primary" fontWeight="medium" mb={0.5}>
-                        Explanation:
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        {explanation}
-                    </Typography>
-                </Box>
-
                 {/* Suggested VQL */}
                 {vql_suggestion && (
                     <Box mb={2}>
@@ -147,7 +137,12 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                         </Paper>
                     </Box>
                 )}
-
+                {/* Explanation (Placed before suggestion for validation) */}
+                <Box mb={2}>
+                    <Typography variant="body2" color="text.primary">
+                        {explanation}
+                    </Typography>
+                </Box>
 
                 {/* Actions */}
                 <Stack direction="row" spacing={1} mt={1}>
@@ -170,20 +165,20 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                         Dismiss
                     </Button>
                     {/* Optional: Add Copy button here as well if preferred */}
-                    {/*
-                    vql_suggestion && (
+
+                    {vql_suggestion && (
                         <Button
                             variant="contained" // Or outlined
                             color="primary" // Or secondary
                             size="small"
                             onClick={handleCopy}
-                            startIcon={copied ? <CheckCircleOutline fontSize="inherit"/> : <ContentCopy fontSize="inherit" />}
+                            startIcon={copied ? <CheckCircleOutline fontSize="inherit" /> : <ContentCopy fontSize="inherit" />}
                             sx={{ textTransform: 'none' }}
                         >
                             {copied ? 'Copied' : 'Copy Suggestion'}
                         </Button>
-                    )
-                    */}
+                    )}
+
                 </Stack>
             </Box>
 

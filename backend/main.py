@@ -1,21 +1,18 @@
 import os
-import sqlglot
-import sqlalchemy as db
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError, ProgrammingError, OperationalError
-from sqlglot import exp, parse_one
-from sqlglot.errors import ParseError
+from typing import List, Dict, Any, Optional
+import logging
+
+from pydantic_ai import Agent, RunContext
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
-import logging
-from pydantic_ai.providers.google_gla import GoogleGLAProvider
-from pydantic_ai.models.gemini import GeminiModel
-from pydantic_ai import Agent
-from pydantic_ai import Agent, ModelRetry, RunContext, format_as_xml
-from typing_extensions import TypeAlias
-from pydantic import BaseModel, Field
+
+import sqlalchemy as db
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError, ProgrammingError, OperationalError
+
+from sqlglot import exp, parse_one
+from sqlglot.errors import ParseError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,7 +34,7 @@ except SQLAlchemyError as e:
     exit(1)
     engine = None  # Set engine to None if connection fails
 except ImportError as e:
-    print(f"FATAL: Could not import Denodo driver. Make sure it's installed.")
+    print("FATAL: Could not import Denodo driver. Make sure it's installed.")
     print(f"ImportError: {e}")
     exit(1)
     engine = None
@@ -58,10 +55,10 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,       # Allows specific origins
-    allow_credentials=True,      # Allows cookies (if applicable)
-    allow_methods=["*"],         # Allows all methods (GET, POST, OPTIONS, etc.)
-    allow_headers=["*"],         # Allows all headers (including Content-Type)
+    allow_origins=origins,  # Allows specific origins
+    allow_credentials=True,  # Allows cookies (if applicable)
+    allow_methods=["*"],  # Allows all methods (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],  # Allows all headers (including Content-Type)
 )
 # --- End CORS Configuration ---
 # --- Pydantic Models ---
@@ -105,7 +102,9 @@ class ValidationError(BaseModel):
 
 class VqlValidationApiResponse(BaseModel):
     validated: bool
-    error_analysis: Optional[ValidationError] = None  # Still expects ValidationError type
+    error_analysis: Optional[ValidationError] = (
+        None  # Still expects ValidationError type
+    )
     message: Optional[str] = None
 
 
@@ -119,59 +118,99 @@ class HealthCheck(BaseModel):
     """Response model to validate and return when performing a health check."""
 
     status: str = "OK"
+
+
 # --- API Endpoint ---
 
-
-def transform_vdb(node: exp.Expression, vdb_name: str) -> exp.Expression:
-    """
-    sqlglot transformer to add a VDB name as the database/catalog
-    to unqualified table identifiers.
-    """
-    if isinstance(node, exp.Table):
-        # Check if the table is *not* already qualified with a database/catalog
-        # node.db gets the database name string, node.catalog gets the catalog name string
-        # Some dialects use 'db', some use 'catalog'. Check both for robustness.
-        # We only want to add the vdb if the table is simple (e.g., "table1", not "schema.table1" or "db.schema.table1")
-        is_qualified = bool(node.db or node.catalog or node.args.get('db') or node.args.get('catalog'))
-
-        # A simple heuristic: only add VDB if it's not qualified at all.
-        # More complex logic might be needed depending on desired behavior for partially qualified names.
-        if not is_qualified and isinstance(node.this, exp.Identifier):
-            # Use node.set() to modify the 'db' argument of the Table node
-            # This correctly handles quoting and structure.
-            # We create a new Identifier for the vdb name.
-            logger.debug(f"Transforming table: {node.sql()} -> Adding db: {vdb_name}")
-            new_node = node.copy()  # Work on a copy to be safe
-            new_node.set('db', exp.Identifier(this=vdb_name, quoted=False))  # Assume VDB names aren't typically quoted
-            return new_node
-
-    return node  # Return the original or modified node
-
-
-def analyze_validation_err(error: str, sql) -> ValidationError:
+def _initialize_agent(system_prompt: str, output_type: type) -> Agent:
+    """Initializes a Pydantic AI Agent with the specified parameters."""
     google_api_key = os.getenv("GEMINI_API_KEY")
     if not google_api_key:
         logger.error("GEMINI_API_KEY environment variable not set.")
         # Raise an exception that the main endpoint can catch
-        raise HTTPException(status_code=500, detail="AI service configuration error: API key missing.")
+        raise HTTPException(
+            status_code=500, detail="AI service configuration error: API key missing."
+        )
+    # Assuming 'gemini-2.5-flash-preview-04-17' is the desired model for both
+    return Agent(
+        "gemini-2.5-flash-preview-04-17",
+        system_prompt=system_prompt,
+        output_type=output_type,
+    )
 
-    agent = Agent('gemini-2.5-flash-preview-04-17',
-                  system_prompt='You are an SQL Validation assistant',
-                  output_type=ValidationError,
-                  )
+
+def transform_vdb(node: exp.Expression, vdb_name: str) -> exp.Expression:
+    """Recursively prefixes unqualified tables in a SQL expression with a VDB name.
+
+    This acts as a sqlglot transformer function.
+
+    Args:
+        node: The current sqlglot Expression node being traversed.
+        vdb_name: The VDB name to use as the database/catalog qualifier.
+
+    Returns:
+        The potentially modified Expression node.
+    """
+    if isinstance(node, exp.Table):
+        is_qualified = bool(
+            node.db or node.catalog or node.args.get("db") or node.args.get("catalog")
+        )
+
+        if not is_qualified and isinstance(node.this, exp.Identifier):
+            logger.debug(f"Transforming table: {node.sql()} -> Adding db: {vdb_name}")
+            new_node = node.copy()
+            new_node.set(
+                "db", exp.Identifier(this=vdb_name, quoted=False)
+            )  # Assume VDB names aren't typically quoted
+            return new_node
+
+    return node
+
+
+def analyze_validation_err(error: str, sql: str) -> ValidationError:
+    """
+    Analyzes VQL validation errors using an AI agent.
+    Provides an explanation for the error and suggests a corrected VQL query based on the input error and SQL.
+    Uses tools to fetch available views/functions if needed.
+
+    Args:
+        error: The error message string returned by the VQL validation process.
+        sql: The original VQL query string that failed validation.
+
+    Returns:
+        A ValidationError object containing the AI-generated explanation and
+        suggested corrected SQL.
+
+    Raises:
+        HTTPException:
+            - 500: If the GEMINI_API_KEY environment variable is not set.
+            - 503: If the AI agent returns an invalid or unexpected response.
+            - 503: If there's an error communicating with the AI service.
+    """
+    agent = _initialize_agent(
+        "You are an SQL Validation assistant", ValidationError
+    )
 
     @agent.tool
     def get_views(ctx: RunContext[str]) -> list[str]:
-        return ["this", "is", "a", "placeholder"]
+        return ["this", "is", "a", "placeholder", "test3"]
 
-    prompt: str = (f'''Analyze the VQL Validation error. Explain concisely why the `Input VQL` failed based on the `Error` and provide the corrected `Valid SQL`.
+    @agent.tool
+    def get_denodo_functions(ctx: RunContext[str]) -> list[str]:
+        return [
+            "REGEXP_COUNT(String originalText, String regex): int",
+            "REPEAT ( <value:text>, <count:int> ):text",
+        ]
+
+    prompt: str = f"""Analyze the VQL Validation error. Explain concisely why the `Input VQL` failed based on the `Error` and provide the corrected `Valid SQL`.
                 Do not use ```sql markdown for the corrected SQL response. Do not explain what you are doing, just provide the explanation and the suggestion directly.
                 If the table is missing, use the get_views to determine which tables are available and use the best guess in your suggestion.
+                   If a function is not valid, use get_denodo_functions to check for available denodo functions.
                                 **ERROR:**
                                 {error}
                                 **Input SQL:**
                                 ```sql
-                                {sql}```''')
+                                {sql}```"""
     try:
         response = agent.run_sync(prompt)
         if response and response.output:
@@ -180,32 +219,43 @@ def analyze_validation_err(error: str, sql) -> ValidationError:
             return response.output
         else:
             logger.error(f"AI agent returned unexpected response: {response}")
-            raise HTTPException(status_code=503, detail="AI service returned an invalid response.")
+            raise HTTPException(
+                status_code=503, detail="AI service returned an invalid response."
+            )
 
     except Exception as agent_error:
         logger.error(f"Error calling AI Agent: {agent_error}", exc_info=True)
         # Raise an HTTPException to be caught by FastAPI and return a 5xx error
-        raise HTTPException(status_code=503, detail=f"AI service unavailable or failed: {agent_error}")
+        raise HTTPException(
+            status_code=503, detail=f"AI service unavailable or failed: {agent_error}"
+        )
 
 
-def analyze_translation_err(exception: str, sql) -> TranslationError:
-    google_api_key = os.getenv("GEMINI_API_KEY")
-    if not google_api_key:
-        logger.error("GEMINI_API_KEY environment variable not set.")
-        # Raise an exception that the main endpoint can catch
-        raise HTTPException(status_code=500, detail="AI service configuration error: API key missing.")
+def analyze_translation_err(exception: str, sql: str) -> TranslationError:
+    """Analyzes an SQL translation error using an AI agent to provide an explanation and suggestion.
 
-    agent = Agent('gemini-2.5-flash-preview-04-17',
-                  system_prompt='You are an SQL Translation assistant',
-                  output_type=TranslationError
-                  )
-    prompt = (f'''Analyze the SQL error below. Explain concisely why the `Input SQL` failed based on the `Error` and provide the corrected `Valid SQL`.
+    Args:
+        exception: The error message string from the SQL execution attempt.
+        sql: The original SQL query string that caused the error.
+
+    Returns:
+        A TranslationError object containing the AI's explanation and suggested SQL correction.
+
+    Raises:
+        HTTPException: If the AI API key is not configured, the AI service returns
+                       an invalid response, or the AI service call fails.
+    """
+    agent = _initialize_agent(
+        "You are an SQL Translation assistant", TranslationError
+    )
+
+    prompt = f"""Analyze the SQL error below. Explain concisely why the `Input SQL` failed based on the `Error` and provide the corrected `Valid SQL`.
                 Do not use ```sql markdown for the corrected SQL response. Do not explain what you are doing, just provide the explanation and the suggestion directly.
                                 **ERROR:**
                                 {exception}
                                 **Input SQL:**
                                 ```sql
-                                {sql}```''')
+                                {sql}```"""
 
     try:
         response = agent.run_sync(prompt)
@@ -215,12 +265,16 @@ def analyze_translation_err(exception: str, sql) -> TranslationError:
             return response.output
         else:
             logger.error(f"AI agent returned unexpected response: {response}")
-            raise HTTPException(status_code=503, detail="AI service returned an invalid response.")
+            raise HTTPException(
+                status_code=503, detail="AI service returned an invalid response."
+            )
 
     except Exception as agent_error:
         logger.error(f"Error calling AI Agent: {agent_error}", exc_info=True)
         # Raise an HTTPException to be caught by FastAPI and return a 5xx error
-        raise HTTPException(status_code=503, detail=f"AI service unavailable or failed: {agent_error}")
+        raise HTTPException(
+            status_code=503, detail=f"AI service unavailable or failed: {agent_error}"
+        )
 
 
 @app.get(
@@ -253,7 +307,7 @@ def validate_vql_query(request: VqlValidateRequest) -> VqlValidationApiResponse:
     if engine is None:
         raise HTTPException(
             status_code=503,  # Service Unavailable
-            detail="Database connection is not available. Check server logs."
+            detail="Database connection is not available. Check server logs.",
         )
 
     vql: str = request.vql
@@ -265,39 +319,53 @@ def validate_vql_query(request: VqlValidateRequest) -> VqlValidationApiResponse:
             # We don't actually need the results, just whether it throws an error
             connection.execute(query)
             logger.info("VQL validation successful via DESC QUERYPLAN.")
-            return VqlValidationApiResponse(validated=True, error_analysis=None, message="VQL syntax check successful!")
+            return VqlValidationApiResponse(
+                validated=True,
+                error_analysis=None,
+                message="VQL syntax check successful!",
+            )
 
     except (OperationalError, ProgrammingError) as e:
-        db_error_message = str(getattr(e, 'orig', e))  # Get specific DB error
+        db_error_message = str(getattr(e, "orig", e))  # Get specific DB error
         logger.warning(f"Denodo VQL validation failed: {db_error_message}")
         try:
-            ai_analysis_result: ValidationError = analyze_validation_err(db_error_message, request.vql)
-            return VqlValidationApiResponse(validated=False, error_analysis=ai_analysis_result, message=None)
+            ai_analysis_result: ValidationError = analyze_validation_err(
+                db_error_message, request.vql
+            )
+            return VqlValidationApiResponse(
+                validated=False, error_analysis=ai_analysis_result, message=None
+            )
         except HTTPException as http_exc:
-            logger.error(f"AI analysis failed during validation error handling: {http_exc.detail}")
+            logger.error(
+                f"AI analysis failed during validation error handling: {http_exc.detail}"
+            )
             return VqlValidationApiResponse(
                 validated=False,
                 error_analysis=None,
-                message=f"Validation Failed: {db_error_message}. Additionally, AI analysis failed: {http_exc.detail}"
+                message=f"Validation Failed: {db_error_message}. Additionally, AI analysis failed: {http_exc.detail}",
             )
         except Exception as ai_err:  # Catch unexpected errors during AI call
-            logger.error(f"Unexpected error during AI validation analysis: {ai_err}", exc_info=True)
+            logger.error(
+                f"Unexpected error during AI validation analysis: {ai_err}",
+                exc_info=True,
+            )
             return VqlValidationApiResponse(
                 validated=False,
                 error_analysis=None,
-                message=f"Validation Failed: {db_error_message}. Additionally, an unexpected error occurred during AI analysis."
+                message=f"Validation Failed: {db_error_message}. Additionally, an unexpected error occurred during AI analysis.",
             )
 
     except SQLAlchemyError as e:
-        logger.error(f"Database connection or general SQLAlchemy error during validation: {e}", exc_info=True)
+        logger.error(
+            f"Database connection or general SQLAlchemy error during validation: {e}",
+            exc_info=True,
+        )
         # Return validation failed with a generic DB error message
         return VqlValidationApiResponse(
             validated=False,
             error_analysis=None,
-            message=f"Database error during validation: {str(e)}"
+            message=f"Database error during validation: {str(e)}",
         )
-        # Or raise HTTPException:
-        # raise HTTPException(status_code=500, detail=f"Database error during validation: {str(e)}")
 
     except Exception as e:
         logger.error(f"Unexpected error during VQL validation: {e}", exc_info=True)
@@ -305,7 +373,7 @@ def validate_vql_query(request: VqlValidateRequest) -> VqlValidationApiResponse:
         return VqlValidationApiResponse(
             validated=False,
             error_analysis=None,
-            message=f"An unexpected error occurred during validation: {str(e)}"
+            message=f"An unexpected error occurred during validation: {str(e)}",
         )
 
 
@@ -338,17 +406,23 @@ def translate_sql(request: SqlQueryRequest) -> TranslateApiResponse:
         print(f"SQL Parsing Error during translation: {pe}")
         try:
             # analyze_translation_err still returns a TranslationError instance
-            ai_analysis_result: TranslationError = analyze_translation_err(str(pe), source_sql)
+            ai_analysis_result: TranslationError = analyze_translation_err(
+                str(pe), source_sql
+            )
             # Return the error analysis case within the new model
             return TranslateApiResponse(error_analysis=ai_analysis_result)
-        except HTTPException as http_exc:  # If AI service itself fails (e.g., key error)
+        except (
+            HTTPException
+        ) as http_exc:  # If AI service itself fails (e.g., key error)
             # Let FastAPI handle this HTTP Exception directly
             raise http_exc
         except Exception as ai_err:  # Catch unexpected errors during the AI call
             print(f"Error during AI analysis: {ai_err}")
             # Return a generic error message using the new model's message field
             # Alternatively, raise HTTPException(status_code=500, detail=f"AI Analysis Error: {str(ai_err)}")
-            return TranslateApiResponse(message=f"An error occurred during AI analysis: {str(ai_err)}")
+            return TranslateApiResponse(
+                message=f"An error occurred during AI analysis: {str(ai_err)}"
+            )
 
     except Exception as e:  # Catch other general exceptions during translation
         print(f"General Error during translation: {e}")
