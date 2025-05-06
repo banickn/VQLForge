@@ -36,9 +36,14 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
 4.  **Docker Network (Required for VDP Validation):** For the AI VQL validation feature, ensure a `denodo-docker-network` exists (`docker network create denodo-docker-network`) and your Denodo VDP container is connected to it.
 5.  **Run:**
     ```bash
-    docker compose up -d
+    docker compose --profile prod up -d
     ```
     Images (`ghcr.io/banickn/vqlforge-backend:main`, `ghcr.io/banickn/vqlforge-frontend:main`) will be pulled from GHCR.
+
+    If you want to build the images yourself for local development, use:
+    ```bash
+    docker compose --profile dev up -d
+    ```
 6.  **Access:**
     *   **UI:** `http://localhost:80`
     *   **API:** `http://localhost:8000` (Docs: `http://localhost:8000/docs`)
@@ -73,5 +78,4 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
 Contributions are welcome. Please open an issue or submit a pull request.
 
 ## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+[MIT](https://choosealicense.com/licenses/mit/)

@@ -5,7 +5,7 @@ networks:
     name: ${APP_NETWORK_NAME:-denodo-lab-net} # Use env var, default to denodo-lab-net
 
 services:
-  frontend:
+  frontend-dev:
     build:
       context: ./frontend # Build from frontend directory
     ports:
@@ -16,8 +16,9 @@ services:
     networks:
       - app_network # Connect to app network
     depends_on:
-      - backend
-  backend:
+      - backend-dev
+    profiles: ["dev"]
+  backend-dev:
     build:
       context: ./backend # Build from backend directory
     ports:
@@ -34,4 +35,34 @@ services:
     user: appuser # Run as non-root user
     networks:
       - app_network # Connect to app network
+    profiles: ["dev"]
+  frontend-prod:
+    image: ghcr.io/banickn/vqlforge-frontend:main
+    ports:
+      - "${HOST_FRONTEND_PORT:-80}:80" # Map host port (env var) to container port 80
+    environment:
+      # Application-specific environment variables from .env (e.g., API URL)
+      NODE_ENV: ${NODE_ENV:-development} # Example with default
+    networks:
+      - app_network # Connect to app network
+    depends_on:
+      - backend-prod
+    profiles: ["prod"]
 
+  backend-prod:
+    image: ghcr.io/banickn/vqlforge-backend:main
+    ports:
+      - "${HOST_BACKEND_PORT:-8000}:8000" # Map host port (env var) to container port 8000
+    volumes:
+      - ./backend:/app # Mount code for local development (remove for production)
+    env_file:
+      - .env
+    environment:
+      # Application-specific environment variables from .env
+      # Add your variables here, e.g., DATABASE_URL: ${DATABASE_URL}
+      - GEMINI_API_KEY=${AI_API_KEY}
+      - CONTAINER_BACKEND_PORT=8000 # Example: pass internal port to app
+    user: appuser # Run as non-root user
+    networks:
+      - app_network # Connect to app network
+    profiles: ["prod"]
