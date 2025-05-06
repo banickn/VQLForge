@@ -3,6 +3,7 @@
 VQLForge translates various SQL dialects into Denodo VQL using a React frontend and a Python/FastAPI backend powered by the `sqlglot` library.
 
 It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
+![image info](vqlforge.png)
 
 ## Features
 
@@ -31,7 +32,7 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
     git clone https://github.com/banickn/VQLForge.git
     cd VQLForge
     ```
-3.  **Configure API Key:** Create a `.env` file in the project root based on the template.env and add your Gemini API key:
+3.  **Configure API Key:** Create a `.env` file in the project root based on the template.env and add your Gemini API key and Denodo properties:
     This is required for all AI Assistant features.
 4.  **Docker Network (Required for VDP Validation):** For the AI VQL validation feature, ensure a `denodo-docker-network` exists (`docker network create denodo-docker-network`) and your Denodo VDP container is connected to it.
 5.  **Run:**

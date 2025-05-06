@@ -16,11 +16,11 @@ from sqlglot.errors import ParseError
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-DENODO_HOST = "denodo-vdp"
+DENODO_HOST = os.getenv("DENODO_HOST")
 DENODO_PORT = 9996
-DENODO_DATABASE = "admin"
-DENODO_USERNAME = "admin"
-DENODO_PASSWORD = "admin"
+DENODO_DATABASE = os.getenv("DENODO_DB")
+DENODO_USERNAME = os.getenv("DENODO_USER")
+DENODO_PASSWORD = os.getenv("DENODO_PW")
 
 # --- SQLAlchemy Engine Setup ---
 DATABASE_URL = f"denodo://{DENODO_USERNAME}:{DENODO_PASSWORD}@{DENODO_HOST}:{DENODO_PORT}/{DENODO_DATABASE}"

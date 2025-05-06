@@ -29,9 +29,14 @@ services:
       - .env
     environment:
       # Application-specific environment variables from .env
-      # Add your variables here, e.g., DATABASE_URL: ${DATABASE_URL}
+      # Denodo credentials
+      - DENODO_HOST=${DENODO_HOST}
+      - DENODO_DB=${DENODO_DB}
+      - DENODO_USER=${DENODO_USER}
+      - DENODO_PW=${DENODO_PW}
+      # AI KEY
       - GEMINI_API_KEY=${AI_API_KEY}
-      - CONTAINER_BACKEND_PORT=8000 # Example: pass internal port to app
+      - CONTAINER_BACKEND_PORT=8000
     user: appuser # Run as non-root user
     networks:
       - app_network # Connect to app network
