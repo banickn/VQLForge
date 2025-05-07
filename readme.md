@@ -32,7 +32,7 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
     git clone https://github.com/banickn/VQLForge.git
     cd VQLForge
     ```
-3.  **Configure API Key:** Create a `.env` file in the project root based on the template.env and add your Gemini API key and Denodo properties:
+3.  **Configure Environment:** Create a `.env` file in the project root based on the `template.env` and add your Gemini API key and Denodo properties:
     This is required for all AI Assistant features.
 4.  **Docker Network (Required for VDP Validation):** For the AI VQL validation feature, ensure a `denodo-docker-network` exists (`docker network create denodo-docker-network`) and your Denodo VDP container is connected to it.
 5.  **Run:**
@@ -46,12 +46,12 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
     docker compose --profile dev up -d
     ```
 6.  **Access:**
-    *   **UI:** `http://localhost:80`
-    *   **API:** `http://localhost:8000` (Docs: `http://localhost:8000/docs`)
+    *   **UI:** `http://localhost:4999`
+    *   **API:** `http://localhost:5000` (Docs: `http://localhost:5000/docs`)
 
 ## How to Use
 
-1.  Open the UI (`http://localhost:80`).
+1.  Open the UI (`http://localhost:4999`).
 2.  Select the source SQL dialect.
 3.  Paste your SQL query.
 4.  Click "Convert".
