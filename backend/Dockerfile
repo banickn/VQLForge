@@ -1,34 +1,32 @@
-# backend/Dockerfile
-
-# Use a lightweight official Python image
+#backend/Dockerfile
 FROM python:3.12-slim
 
-# Create a non-root user
-RUN useradd --create-home --shell /bin/bash appuser
-# Set working directory
-WORKDIR /app
+# Set environment variables for Python
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
 # Install uv package manager
 RUN pip install --no-cache-dir uv
 
-# Copy custom sqlglot dependency source
-COPY sqlglot-vql /tmp/sqlglot_src
+# Create a non-root user and group
+RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup -d /app -s /sbin/nologin appuser
 
-# Copy application files using explicit relative paths
-COPY --chown=appuser:appuser ./pyproject.toml ./uv.lock* ./README.md ./main.py ./
-# Install project dependencies and custom dependency
-RUN uv pip install --system --no-cache-dir . /tmp/sqlglot_src
+WORKDIR /app
 
-RUN uv pip install --system --no-cache .
-# Clean up temporary source
-RUN rm -rf /tmp/sqlglot_src
+# Copy dependency definition files and your submodule source code
+# The submodule needs to be at /app/sqlglot-vql for the path dependency to work
+COPY --chown=appuser:appgroup ./pyproject.toml ./uv.lock* ./
+COPY --chown=appuser:appgroup ./sqlglot-vql ./sqlglot-vql/
+# Copy the rest of your application files
+COPY --chown=appuser:appgroup ./README.md ./main.py ./
 
-# Copy application code with ownership set to appuser
-COPY --chown=appuser:appuser . .
+# Install all project dependencies, including sqlglot-vql from the local path
+# uv will read pyproject.toml, see the file:// reference, and build/install sqlglot-vql
+# from the ./sqlglot-vql/ directory copied above.
+RUN uv pip install --system --no-cache-dir .
 
-# Switch to non-root user for subsequent commands
+# Switch to non-root user
 USER appuser
 
-# Expose the application port
 EXPOSE 5000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]

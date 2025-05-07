@@ -11,6 +11,7 @@ import sqlalchemy as db
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError, ProgrammingError, OperationalError
 
+import sqlglot
 from sqlglot import exp, parse_one
 from sqlglot.errors import ParseError
 
@@ -193,10 +194,14 @@ def analyze_validation_err(error: str, sql: str) -> ValidationError:
 
     @agent.tool
     def get_views(ctx: RunContext[str]) -> list[str]:
+        # This is a placeholder. Later, this would query Denodo metadata.
+        # For now, returning static list.
         return ["this", "is", "a", "placeholder", "test3"]
 
     @agent.tool
     def get_denodo_functions(ctx: RunContext[str]) -> list[str]:
+        # This is a placeholder. Later, this would query Denodo metadata.
+        # For now, returning static list.
         return [
             "REGEXP_COUNT(String originalText, String regex): int",
             "REPEAT ( <value:text>, <count:int> ):text",
@@ -386,7 +391,7 @@ def translate_sql(request: SqlQueryRequest) -> TranslateApiResponse:
         raise HTTPException(status_code=400, detail="Missing 'sql' in request body")
     if not dialect:
         raise HTTPException(status_code=400, detail="Missing 'dialect' in request body")
-
+    print(f"Using sqlglot version: {sqlglot.__version__}")
     logger.debug(f"Received translation request: dialect='{dialect}', vdb='{vdb}'")
     logger.debug(f"Source SQL: {source_sql}")
 

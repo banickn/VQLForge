@@ -27,8 +27,8 @@ COPY --from=builder /app/build /usr/share/nginx/html
 # Copy the custom Nginx configuration file
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port 80 for Nginx
-EXPOSE 80
+# Expose port 4999 for Nginx
+EXPOSE 4999
 
 # Add a wrapper script
 COPY entrypoint-wrapper.sh /entrypoint-wrapper.sh
