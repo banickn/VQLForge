@@ -8,9 +8,6 @@ RUN useradd --create-home --shell /bin/bash appuser
 # Set working directory
 WORKDIR /app
 
-# Copy files needed for dependency installation
-#COPY pyproject.toml uv.lock* README.md ./
-
 # Install uv package manager
 RUN pip install --no-cache-dir uv
 
@@ -33,5 +30,5 @@ COPY --chown=appuser:appuser . .
 USER appuser
 
 # Expose the application port
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 5000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
