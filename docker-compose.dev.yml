@@ -1,0 +1,17 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      NODE_ENV: development
+
+  backend:
+    build:
+      context: ./backend
+    volumes:
+      - ./backend:/app
+    environment:
+      NODE_ENV: development

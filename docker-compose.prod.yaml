@@ -1,0 +1,10 @@
+services:
+  frontend:
+    image: ghcr.io/banickn/vqlforge-frontend:main
+    environment:
+      NODE_ENV: production
+
+  backend:
+    image: ghcr.io/banickn/vqlforge-backend:main
+    environment:
+      NODE_ENV: production
