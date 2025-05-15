@@ -75,7 +75,10 @@ function App() {
         setTargetSql(initialTargetSqlPlaceholder); // Optionally reset target
         clearValidationState(); // Clear any previous validation
     };
-
+    const handleUseVqlSuggestion = (suggestedVql) => {
+        setTargetSql(suggestedVql); // Update the target VQL editor
+        clearValidationState();     // Clear the validation error/analysis message
+    };
     const handleDismissError = () => {
         setError(null); // Simply clear the error notification
     };
@@ -260,7 +263,6 @@ function App() {
     const targetEditorFixedWidth = '550px';
     const controlsFixedWidth = '220px';
     const renderEditorCard = (title, borderColor, value, readOnly = false, onChangeHandler = null) => (
-        // ... (renderEditorCard implementation - no changes needed here)
         <Card sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} elevation={2}>
             <CardHeader title={title} sx={{ borderBottom: '5px solid', borderColor: borderColor, flexShrink: 0, py: 1.5, px: 2 }} titleTypographyProps={{ variant: 'h6' }} />
             <CardContent sx={{ flexGrow: 1, p: 0, '&:last-child': { pb: 0 }, overflow: 'hidden', height: '100%' }}>
@@ -323,7 +325,8 @@ function App() {
                     {validationResult?.status === 'error_ai' && validationResult.data && (
                         <AiValidationErrorAnalysis
                             errorData={validationResult.data}
-                            onDismiss={clearValidationState} // Only needs dismiss
+                            onDismiss={clearValidationState}
+                            onUseVqlSuggestion={handleUseVqlSuggestion}
                         />
                     )}
                     {/* --- Validation Alerts*/}
@@ -425,7 +428,7 @@ function App() {
 
             {/* --- Footer --- */}
             <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {/* ... (Footer content - no changes needed) ... */}
+                {/* Footer content */}
                 <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.1 -
                     MIT License
                 </a>

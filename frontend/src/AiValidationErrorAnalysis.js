@@ -10,31 +10,33 @@ import {
     Stack,
     useTheme,
     Alert,
-    AlertTitle,
 } from '@mui/material';
 import {
     ContentCopy,
     CheckCircleOutline,
-    WarningAmber, // Use a warning icon
+    WarningAmber,
 } from '@mui/icons-material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
-function AiValidationErrorAnalysis({ errorData, onDismiss }) {
+function AiValidationErrorAnalysis({ errorData, onDismiss, onUseVqlSuggestion }) {
     const theme = useTheme();
     const [copied, setCopied] = useState(false);
 
-    // sql_suggestion field name is kept for consistency with backend model
     const { explanation, sql_suggestion: vql_suggestion } = errorData;
 
-    const handleCopy = async () => {
+    const handleUseVqlSuggestionClick = async () => {
         if (!vql_suggestion) return;
+
         try {
             await navigator.clipboard.writeText(vql_suggestion);
             setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            setTimeout(() => setCopied(false), 2000); // Reset copied state for button feedback
         } catch (err) {
-            console.error('Failed to copy text: ', err);
-            // Consider adding user feedback for copy failure
+            console.error('Failed to copy VQL suggestion to clipboard: ', err);
+        }
+
+        if (onUseVqlSuggestion) {
+            onUseVqlSuggestion(vql_suggestion);
         }
     };
 
@@ -44,22 +46,20 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
         }
     };
 
-    // Determine colors based on warning severity
     const severity = 'warning';
     const mainColor = theme.palette[severity].main;
     const darkColor = theme.palette[severity].dark;
-    const lighterColor = theme.palette[severity].lighter || theme.palette.grey[50]; // Fallback lighter color
+    const lighterColor = theme.palette[severity].lighter || theme.palette.grey[50];
     const lightColor = theme.palette[severity].light;
-
 
     return (
         <Alert
-            icon={false} // Remove default icon
-            severity={severity} // Use warning severity for styling
+            icon={false}
+            severity={severity}
             sx={{
                 borderLeft: `4px solid ${mainColor}`,
-                backgroundColor: theme.palette.background.paper, // Keep paper background
-                color: theme.palette.text.primary, // Use standard text color for main content
+                backgroundColor: theme.palette.background.paper,
+                color: theme.palette.text.primary,
                 boxShadow: theme.shadows[2],
                 display: 'flex',
                 flexDirection: 'column',
@@ -71,7 +71,6 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
             }}
         >
             <Box sx={{ padding: theme.spacing(2) }}>
-                {/* Custom Header */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                     <WarningAmber fontSize="small" sx={{ color: mainColor }} />
                     <Typography
@@ -79,7 +78,7 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                         component="div"
                         sx={{
                             fontWeight: 600,
-                            color: darkColor, // Use dark warning color for title
+                            color: darkColor,
                             fontSize: '1rem',
                             lineHeight: 1.2
                         }}
@@ -88,7 +87,6 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                     </Typography>
                 </Box>
 
-                {/* Suggested VQL */}
                 {vql_suggestion && (
                     <Box mb={2}>
                         <Typography variant="body2" fontWeight="medium" color="text.primary" mb={0.5}>
@@ -118,38 +116,44 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                             >
                                 <code>{vql_suggestion}</code>
                             </Typography>
+                            {/* This IconButton is for quick copy if user only wants to copy from code block, separate from "Use Suggestion" button */}
                             <IconButton
-                                onClick={handleCopy}
+                                onClick={async () => { // Inline handler for simple copy from here
+                                    try {
+                                        await navigator.clipboard.writeText(vql_suggestion);
+                                        setCopied(true); // This will make the "Use Suggestion" button show "Copied" if clicked after this
+                                        setTimeout(() => setCopied(false), 2000);
+                                    } catch (err) {
+                                        console.error('Failed to copy text: ', err);
+                                    }
+                                }}
                                 size="small"
                                 sx={{
                                     position: 'absolute',
-                                    top: theme.spacing(0.5), // Adjust position slightly
+                                    top: theme.spacing(0.5),
                                     right: theme.spacing(0.5),
                                     color: copied ? theme.palette.success.main : theme.palette.action.active,
                                     '&:hover': {
                                         backgroundColor: theme.palette.action.hover,
                                     }
                                 }}
-                                aria-label="copy suggested vql"
+                                aria-label="copy suggested vql from code block"
                             >
                                 {copied ? <CheckCircleOutline fontSize="inherit" /> : <ContentCopy fontSize="inherit" />}
                             </IconButton>
                         </Paper>
                     </Box>
                 )}
-                {/* Explanation (Placed before suggestion for validation) */}
                 <Box mb={2}>
                     <Typography variant="body2" color="text.primary">
                         {explanation}
                     </Typography>
                 </Box>
 
-                {/* Actions */}
                 <Stack direction="row" spacing={1} mt={1}>
-                    {/* Only Dismiss button */}
                     <Button
                         variant="outlined"
-                        color="inherit" // Use inherit for neutral look
+                        color="inherit"
                         size="small"
                         onClick={handleDismiss}
                         sx={{
@@ -164,30 +168,28 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
                     >
                         Dismiss
                     </Button>
-                    {/* Optional: Add Copy button here as well if preferred */}
-
+                    {/* Button */}
                     {vql_suggestion && (
                         <Button
-                            variant="contained" // Or outlined
-                            color="primary" // Or secondary
+                            variant="contained"
+                            color="primary"
                             size="small"
-                            onClick={handleCopy}
-                            startIcon={copied ? <CheckCircleOutline fontSize="inherit" /> : <ContentCopy fontSize="inherit" />}
+                            onClick={handleUseVqlSuggestionClick}
+                            startIcon={copied ? <CheckCircleOutline fontSize="inherit" /> : <ContentCopy fontSize="inherit" />} // Icon indicates copy status
                             sx={{ textTransform: 'none' }}
                         >
-                            {copied ? 'Copied' : 'Copy Suggestion'}
+                            {/* Text changed to "Use Suggestion", "Copied" state provides feedback on copy action */}
+                            {copied ? 'Copied!' : 'Use Suggestion'}
                         </Button>
                     )}
-
                 </Stack>
             </Box>
 
-            {/* Footer with AI disclaimer */}
             <Box
                 sx={{
                     width: '100%',
-                    backgroundColor: lighterColor, // Use lighter warning color
-                    borderTop: `1px solid ${lightColor}`, // Use light warning color
+                    backgroundColor: lighterColor,
+                    borderTop: `1px solid ${lightColor}`,
                     padding: theme.spacing(1, 2),
                     mt: 2,
                     display: 'flex',
@@ -207,9 +209,10 @@ function AiValidationErrorAnalysis({ errorData, onDismiss }) {
 AiValidationErrorAnalysis.propTypes = {
     errorData: PropTypes.shape({
         explanation: PropTypes.string.isRequired,
-        sql_suggestion: PropTypes.string, // Suggestion might not always be possible
+        sql_suggestion: PropTypes.string,
     }).isRequired,
     onDismiss: PropTypes.func.isRequired,
+    onUseVqlSuggestion: PropTypes.func.isRequired,
 };
 
 export default AiValidationErrorAnalysis;
