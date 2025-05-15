@@ -200,17 +200,59 @@ def analyze_validation_err(error: str, sql: str) -> ValidationError:
 
     @agent.tool
     def get_denodo_functions(ctx: RunContext[str]) -> list[str]:
-        # This is a placeholder. Later, this would query Denodo metadata.
-        # For now, returning static list.
-        return [
-            "REGEXP_COUNT(String originalText, String regex): int",
-            "REPEAT ( <value:text>, <count:int> ):text",
-        ]
+        if engine is None:
+            raise HTTPException(
+                status_code=503,  # Service Unavailable
+                detail="Database connection is not available. Check server logs.",
+            )
+        vql = f"list functions"
+        try:
+            with engine.connect() as connection:
+                query = text(vql)
+                result = connection.execute(query)
+                functions: list[str] = [row[2] for row in result]
+
+            logger.info(f"Successfully retrieved VDB names: {functions}")
+            return functions
+        except Exception as e:
+            # Log the actual exception for debugging
+            logger.error(f"Error executing VQL query '{vql}' to get functions: {e}", exc_info=True)
+            # Raise an HTTP exception that is more user-friendly for the API client
+            raise HTTPException(
+                status_code=500,  # Internal Server Error for query execution failures
+                detail=f"Failed to retrieve functions from Denodo: {str(e)}",
+            )
+
+    @agent.tool
+    def get_vdbs(ctx: RunContext[str]) -> list[str]:
+        if engine is None:
+            raise HTTPException(
+                status_code=503,  # Service Unavailable
+                detail="Database connection is not available. Check server logs.",
+            )
+        vql = f"select db_name from get_databases()"
+        try:
+            with engine.connect() as connection:
+                query = text(vql)
+                result = connection.execute(query)
+                db_names: list[str] = [row.db_name for row in result]
+
+            logger.info(f"Successfully retrieved VDB names: {db_names}")
+            return db_names
+        except Exception as e:
+            # Log the actual exception for debugging
+            logger.error(f"Error executing VQL query '{vql}' to get VDBs: {e}", exc_info=True)
+            # Raise an HTTP exception that is more user-friendly for the API client
+            raise HTTPException(
+                status_code=500,  # Internal Server Error for query execution failures
+                detail=f"Failed to retrieve VDB list from the database: {str(e)}",
+            )
 
     prompt: str = f"""Analyze the VQL Validation error. Explain concisely why the `Input VQL` failed based on the `Error` and provide the corrected `Valid SQL`.
                 Do not use ```sql markdown for the corrected SQL response. Do not explain what you are doing, just provide the explanation and the suggestion directly.
                 If the table is missing, use the get_views to determine which tables are available and use the best guess in your suggestion.
-                   If a function is not valid, use get_denodo_functions to check for available denodo functions.
+                If a function is not valid, use get_denodo_functions to check for available denodo functions.
+                If a database name is invalid, use get_vdbs to check for database names. Suggest one that is similar to the input or tell the user to double check the input.
                                 **ERROR:**
                                 {error}
                                 **Input SQL:**
