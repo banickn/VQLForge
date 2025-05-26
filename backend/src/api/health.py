@@ -1,4 +1,3 @@
-# src/api/endpoints/health.py
 from fastapi import APIRouter, status
 from src.schemas.common import HealthCheck
 

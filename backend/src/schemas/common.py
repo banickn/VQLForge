@@ -14,3 +14,7 @@ class QueryResponse(BaseModel):
     results: List[Dict[str, Any]]
     parsed_ast: str | None = None
     message: str | None = None
+
+
+class VDBResponse(BaseModel):
+    results: List[Dict[str, str]]

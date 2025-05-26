@@ -1,4 +1,3 @@
-# src/api/endpoints/translate.py
 import logging
 import sqlglot
 from sqlglot import parse_one
@@ -7,7 +6,8 @@ from fastapi import APIRouter, HTTPException
 
 from src.schemas.translation import SqlQueryRequest, TranslateApiResponse
 from src.utils.ai_analyzer import analyze_sql_translation_error
-from src.utils.vdb_transformer import transform_vdb_table_qualification  # Updated import
+from src.utils.vdb_transformer import transform_vdb_table_qualification
+from src.schemas.translation import TranslationError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,7 +24,6 @@ def translate_sql_to_vql(request: SqlQueryRequest) -> TranslateApiResponse:
     if not dialect:
         raise HTTPException(status_code=400, detail="Missing 'dialect' in request body")
 
-    logger.info(f"SQLGlot version: {sqlglot.__version__}")
     logger.debug(f"Translation request: dialect='{dialect}', vdb='{vdb}', SQL='{source_sql[:100]}...'")
 
     try:
@@ -39,7 +38,7 @@ def translate_sql_to_vql(request: SqlQueryRequest) -> TranslateApiResponse:
     except ParseError as pe:
         logger.warning(f"SQL Parsing Error during translation: {pe}", exc_info=True)
         try:
-            ai_analysis_result = analyze_sql_translation_error(str(pe), source_sql)
+            ai_analysis_result: TranslationError = analyze_sql_translation_error(str(pe), source_sql)
             return TranslateApiResponse(error_analysis=ai_analysis_result)
         except HTTPException as http_exc:  # AI service's own HTTPExceptions (e.g. API key)
             raise http_exc
