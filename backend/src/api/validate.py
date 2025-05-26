@@ -1,4 +1,3 @@
-# src/api/endpoints/validate.py
 import logging
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
@@ -6,7 +5,8 @@ from sqlalchemy.exc import OperationalError, ProgrammingError, SQLAlchemyError
 
 from src.schemas.validation import VqlValidateRequest, VqlValidationApiResponse
 from src.utils.ai_analyzer import analyze_vql_validation_error
-from src.db.session import get_engine  # Use the centralized engine
+from src.db.session import get_engine
+from src.schemas.validation import ValidationError  # Use the centralized engine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,7 +40,7 @@ def validate_vql_query_endpoint(request: VqlValidateRequest) -> VqlValidationApi
         db_error_message = str(getattr(e, "orig", e))  # Get specific DB error
         logger.warning(f"Denodo VQL validation failed: {db_error_message}")
         try:
-            ai_analysis_result = analyze_vql_validation_error(db_error_message, request.vql)
+            ai_analysis_result: ValidationError = analyze_vql_validation_error(db_error_message, request.vql)
             return VqlValidationApiResponse(
                 validated=False, error_analysis=ai_analysis_result
             )

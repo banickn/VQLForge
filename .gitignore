@@ -1,2 +1,7 @@
-backend/test.py
 .env
+backend/__pycache__/*
+backend/src/__pycache__/*
+backend/src/api/__pycache__/*
+backend/src/db/__pycache__/*
+backend/src/schemas/__pycache__/*
+backend/src/utils/__pycache__/*

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
 
     DATABASE_URL: str | None = None  # Will be constructed
-
+    APP_VDB_CONF: str
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def __init__(self, **values):

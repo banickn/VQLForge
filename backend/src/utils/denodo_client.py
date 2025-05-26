@@ -1,4 +1,3 @@
-# src/services/denodo_client.py
 import logging
 from fastapi import HTTPException
 from sqlalchemy import text
