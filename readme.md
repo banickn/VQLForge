@@ -32,8 +32,23 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
     git clone https://github.com/banickn/VQLForge.git
     cd VQLForge
     ```
-3.  **Configure Environment:** Create a `.env` file in the project root based on the `template.env` and add your Gemini API key and Denodo properties:
-    This is required for all AI Assistant features.
+3.  **Configure Environment:** Create a `.env` file in the project root based on the `template.env` and add modify the following properties:
+    - **Denodo settings**
+        - DENODO_HOST=<DENODO_HOST> # Server url
+        - DENODO_DB=<DENODO_DB_NAME> # Default VDB
+        - DENODO_USER=<DENODO_USER> # This user should read/execute access to all VDBs
+        - DENODO_PW=<DENODO_USER_PW> 
+
+    - **AI API**
+        - AI_API_KEY=<GEMINI_KEY> # This needs to be a valid Gemini 2.5 Flash key
+    - **Others**
+        - APP_NETWORK_NAME=denodo-lab-net # Rename or remove if you don't connect via docker network
+        - HOST_PROJECT_PATH=<repository_path> # Path to your VQLForge directory. Required for VDB config
+
+    Go to ./backend/vdb_conf.yaml and configure the name of your available Denodo VDBs so they are selectable in VQLForge.
+
+    These configurations are required to run the advanced query analysis features.
+
 4.  **Docker Network (Required for VDP Validation):** For the AI VQL validation feature, ensure a `denodo-docker-network` exists (`docker network create denodo-docker-network`) and your Denodo VDP container is connected to it.
 5.  **Run:**
     If you want to build the images yourself for local development use:
