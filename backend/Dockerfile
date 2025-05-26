@@ -16,9 +16,10 @@ WORKDIR /app
 # Copy dependency definition files and your submodule source code
 # The submodule needs to be at /app/sqlglot-vql for the path dependency to work
 COPY --chown=appuser:appgroup ./pyproject.toml ./uv.lock* ./
+COPY --chown=appuser:appgroup ./README.md ./
 COPY --chown=appuser:appgroup ./sqlglot-vql ./sqlglot-vql/
 # Copy the rest of your application files
-COPY --chown=appuser:appgroup ./README.md ./main.py ./
+COPY --chown=appuser:appgroup ./src ./src/
 
 # Install all project dependencies, including sqlglot-vql from the local path
 # uv will read pyproject.toml, see the file:// reference, and build/install sqlglot-vql
@@ -29,4 +30,4 @@ RUN uv pip install --system --no-cache-dir .
 USER appuser
 
 EXPOSE 5000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "5000"]

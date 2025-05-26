@@ -25,7 +25,13 @@ services:
       - DENODO_PW=${DENODO_PW}
       # AI KEY
       - GEMINI_API_KEY=${AI_API_KEY}
-      - CONTAINER_BACKEND_PORT=5000
+      - CONTAINER_BACKEND_PORT=${CONTAINER_BACKEND_PORT:-5000}
+      # Files
+      - APP_VDB_CONF=/opt/vdb_conf.yaml
     user: appuser
+    volumes:
+      - ${HOST_PROJECT_PATH}/backend/vdb_conf.yaml:/opt/vdb_conf.yaml
+
+
     networks:
       - app_network
