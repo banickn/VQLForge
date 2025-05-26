@@ -1,3 +1,4 @@
 [submodule "backend/sqlglot-vql"]
 	path = backend/sqlglot-vql
 	url = https://github.com/banickn/sqlglot
+	branch = main

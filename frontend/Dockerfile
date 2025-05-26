@@ -1,6 +1,6 @@
 # ---- Stage 1: Build ----
 # Use an official Node runtime as a parent image for the build stage
-FROM node:23-alpine AS builder
+FROM node:24-alpine AS builder
 
 # Set the working directory in the container
 WORKDIR /app
