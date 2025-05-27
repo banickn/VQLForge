@@ -1,5 +1,6 @@
 import logging
 from typing import Type
+from sqlglot import exp, parse_one
 from fastapi import HTTPException
 from pydantic_ai import Agent, RunContext, Tool
 
@@ -7,7 +8,7 @@ from src.config import settings
 from src.schemas.translation import TranslationError
 from src.schemas.validation import ValidationError
 # Import the Denodo client functions
-from src.utils.denodo_client import get_available_views_from_denodo, get_denodo_functions_list, get_vdb_names_list
+from src.utils.denodo_client import get_available_views_from_denodo, get_denodo_functions_list, get_vdb_names_list, get_view_cols
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +20,12 @@ def _initialize_ai_agent(system_prompt: str, output_type: Type, tools: list[Tool
             status_code=500, detail="AI service configuration error: API key missing."
         )
 
-    print(tools)
     return Agent(
         # Consider making model name a config variable
         "gemini-2.5-flash-preview-04-17",  # "gemini-1.5-flash-latest" might be more current
         system_prompt=system_prompt,
         output_type=output_type,
+        deps_type=set[str],
         tools=tools
         # llm_kwargs={"api_key": settings.GEMINI_API_KEY} # pydantic-ai typically handles GOOGLE_API_KEY env var directly
     )
@@ -46,16 +47,23 @@ def _get_vdbs() -> list[str]:
     return get_vdb_names_list()
 
 
-def _extract_tables(ctx: RunContext[str]) -> str:
-    """Get the player's name."""
+def _get_view_metadata(ctx: RunContext[set[str]]) -> list[dict[str, str]]:
+    """Retrieves a list of columns for the views. Use this tool when an error refers to field not found in view error."""
+    return get_view_cols(ctx.deps)
 
-    return "bla"
+
+def _extract_tables(input_vql: str) -> set[str]:
+    tables = set()
+    for table in parse_one(input_vql).find_all(exp.Table):
+        tables.add(table.name)
+    return tables
 
 
 def analyze_vql_validation_error(error: str, input_vql: str) -> ValidationError:
+
     agent = _initialize_ai_agent(
         "You are an SQL Validation assistant for Denodo VQL", ValidationError, tools=[
-            Tool(_get_functions), Tool(_get_views), Tool(_get_vdbs), Tool(_extract_tables)]
+            Tool(_get_functions), Tool(_get_views), Tool(_get_vdbs), Tool(_get_view_metadata)]
     )
 
     prompt: str = f"""You are an expert Denodo VQL Assistant. Your primary goal is to analyze Denodo VQL validation errors, explain them concisely, and provide accurate, corrected VQL suggestions.
@@ -70,8 +78,9 @@ def analyze_vql_validation_error(error: str, input_vql: str) -> ValidationError:
                 **Input VQL:**
                 ```vql
                 {input_vql}```"""
+    vql_tables: set[str] = _extract_tables(input_vql)
     try:
-        response = agent.run_sync(prompt)
+        response = agent.run_sync(prompt, deps=vql_tables)
         if response and response.output:
             logger.info(f"AI Validation Analysis Explanation: {response.output.explanation}")
             logger.info(f"AI Validation Analysis Suggestion: {response.output.sql_suggestion}")
@@ -92,9 +101,8 @@ def analyze_sql_translation_error(exception_message: str, input_sql: str) -> Tra
     agent = _initialize_ai_agent(
         "You are an SQL Translation assistant, focusing on transpiling to Denodo VQL", TranslationError
     )
-    # Add tools here if the translation assistant needs them (e.g., to understand target VQL features)
 
-    prompt = f"""Analyze the SQL parsing/translation error. 
+    prompt = f"""Analyze the SQL parsing/translation error.
                 Explain concisely why the `Input SQL` failed based on the `Error` and provide a corrected `Valid SQL Suggestion` that would be parsable by the original dialect or a hint for VQL.
                 Do not use ```sql markdown for the corrected SQL response. Do not explain what you are doing, just provide the explanation and the suggestion directly.
                 **ERROR:**

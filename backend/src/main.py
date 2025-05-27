@@ -14,20 +14,15 @@ logger = logging.getLogger(__name__)
 # Initialize services
 if not db_engine:
     logger.warning("Database engine not initialized on import. Attempting explicit init.")
-    # Potentially exit if DB is critical for app startup
-    # For now, we let endpoints handle `get_engine()` failure if init_db_engine() fails here.
-    # If init_db_engine() itself raises an unhandled exception or exits, app won't start.
+
     if init_db_engine() is None:
         logger.fatal("Application startup failed: Could not connect to the database.")
-        # Depending on your deployment, you might exit(1) or let it run and fail on requests
-        # For Kubernetes/Docker, failing to start might be better for restart policies.
-        # exit(1) # Uncomment if DB is absolutely critical for app to even start
+        exit(1)
 
 app = FastAPI(
     title="VQLForge Backend",
     description="The backend to transpile and validate SQL to VQL",
     version="1.0.0",
-    # Potentially add lifespan events for DB connection pool management if needed
 )
 
 # --- CORS Configuration ---

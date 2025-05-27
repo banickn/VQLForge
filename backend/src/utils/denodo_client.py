@@ -46,3 +46,25 @@ def get_vdb_names_list() -> list[str]:
             status_code=500,
             detail=f"Failed to retrieve VDB list from the database: {str(e)}",
         )
+
+
+def get_view_cols(tables: list[str]) -> list[dict[str, str]]:
+    if not tables:
+        logger.info("No tables provided to get_view_cols, returning empty list.")
+        return []
+
+    engine = get_engine()
+    tables_in_clause: str = ",".join(f"'{s}'" for s in tables)
+    vql: str = f"select view_name, column_name, column_sql_type from GET_view_columns() where view_name in ({tables_in_clause})"
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(text(vql))
+            column_details: list[dict[str, str]] = [dict(row._mapping) for row in result]
+            logger.info(f"Successfully retrieved view cols")
+            return column_details
+    except Exception as e:
+        logger.error(f"Error executing VQL query '{vql}' to get view columns: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve view column details from the database: {str(e)}",
+        )
