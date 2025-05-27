@@ -1,9 +1,23 @@
 # VQLForge
+**Translate SQL to Denodo VQL with ease, powered by AI insights.**
 
 VQLForge translates various SQL dialects into Denodo VQL using a React frontend and a Python/FastAPI backend powered by the `sqlglot` library.
 
 It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+
 ![image info](vqlforge.png)
+
+## Why VQLForge?
+
+Migrating SQL to Denodo's VQL can be a time-consuming and error-prone process. VQLForge aims to:
+
+*   **Accelerate Migrations:** Automate the bulk of SQL-to-VQL translation by using the UI or the REST API.
+*   **Reduce Errors:** Leverage `sqlglot` for robust parsing and AI for error analysis and VQL validation.
+*   **Improve Developer Productivity:** Provide a user-friendly interface for quick conversions.
+
 
 ## Features
 
@@ -32,25 +46,33 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
     git clone https://github.com/banickn/VQLForge.git
     cd VQLForge
     ```
-3.  **Configure Environment:** Create a `.env` file in the project root based on the `template.env` and add modify the following properties:
-    - **Denodo settings**
-        - DENODO_HOST=<DENODO_HOST> # Server url
-        - DENODO_DB=<DENODO_DB_NAME> # Default VDB
-        - DENODO_USER=<DENODO_USER> # This user should read/execute access to all VDBs
-        - DENODO_PW=<DENODO_USER_PW> 
+3.  **Configure Environment:** Create a `.env` file in the project root by copying `template.env` (`cp template.env .env`). Then, modify the following properties:
 
-    - **AI API**
-        - AI_API_KEY=<GEMINI_KEY> # This needs to be a valid Gemini 2.5 Flash key
-    - **Others**
-        - APP_NETWORK_NAME=denodo-lab-net # Rename or remove if you don't connect via docker network
-        - HOST_PROJECT_PATH=<repository_path> # Path to your VQLForge directory. Required for VDB config
-
-    Go to ./backend/vdb_conf.yaml and configure the name of your available Denodo VDBs so they are selectable in VQLForge.
+    | Variable            | Description                                                                 | Required for           | Example                     |
+    |---------------------|-----------------------------------------------------------------------------|------------------------|-----------------------------|
+    | `DENODO_HOST`       | Denodo VDP server URL                                                       | AI Validation          | `denodo-server.example.com` |
+    | `DENODO_DB`         | Default Denodo Virtual DataBase (VDB)                                       | AI Validation          | `my_vdb`                    |
+    | `DENODO_USER`       | Denodo user with read/execute access to VDBs                                | AI Validation          | `denodo_user`               |
+    | `DENODO_PW`         | Password for the Denodo user                                                | AI Validation          | `password`                  |
+    | `AI_API_KEY`        | Google Gemini API Key (e.g., Gemini 1.5 Flash)                              | AI Assistant           | `YOUR_GEMINI_API_KEY`       |
+    | `APP_NETWORK_NAME`  | Docker network name for connecting to Denodo (if Denodo is also in Docker)  | AI Validation          | `denodo-lab-net`            |
+    | `HOST_PROJECT_PATH` | Absolute path to your local VQLForge repository directory.                  | Translation (VDBs)     | `/path/to/your/VQLForge`    |
 
     These configurations are required to run the advanced query analysis features.
 
-4.  **Docker Network (Required for VDP Validation):** For the AI VQL validation feature, ensure a `denodo-docker-network` exists (`docker network create denodo-docker-network`) and your Denodo VDP container is connected to it.
-5.  **Run:**
+4.  **Configure Denodo VDBs:**
+    Edit `./backend/vdb_conf.yaml` to list your available Denodo VDB names. This allows them to be selectable in VQLForge when using AI validation features.
+    ```yaml
+    # ./backend/vdb_conf.yaml
+    available_vdbs:
+      - "your_vdb_name_1"
+      - "your_vdb_name_2"
+      - "finance_vdb"
+    ```
+
+5.  **Docker Network (Required for VDP Validation):** For the AI VQL validation feature, ensure a `denodo-docker-network` exists (`docker network create denodo-docker-network`) and your Denodo VDP container is connected to it.
+
+6.  **Run:**
     If you want to build the images yourself for local development use:
     ```bash
      docker-compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
@@ -81,7 +103,10 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
     *   Connect to a Denodo VDP instance to validate the generated VQL query and report success or Denodo errors.
 *   Requires `AI_API_KEY` in `.env` for all functions.
 *   Requires Denodo VDP connection details (see below) for the validation function.
-*   Future work involves deeper integration using a more agentic AI approach for complex error handling and suggestions.
+*   Leverages agentic tooling, meaning the AI can perform actions like...
+    * Schema Discovery: list available VDBs and identifies accessible view names
+    * Metadata retrieval: Fetches details (e.g., columns, types) for views used in your queries.
+    * Functions: Automatically identifies the correct Denodo function in your query.
 
 ## Denodo VDP Connection
 
@@ -90,9 +115,16 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
 *   **Credentials:** Uses default Denodo credentials (`admin`/`admin`) for connection. This is **not suitable for production** and should be configured securely if deployed outside local development.
 *   Basic `sqlglot` conversion (without AI validation) does **not** require a Denodo connection.
 
+## Roadmap
+
+* Improved sqlglot denodo dialect for better translations.
+* Advanced mode for SQL performance improvements
+* SQL inline comment generation from metadata
+* Support for various AI APIs and models
+
 ## Contributing
 
-Contributions are welcome. Please open an issue or submit a pull request.
+Please open an issue to discuss potential changes or submit a pull request with your improvements. We appreciate contributions for bug fixes, new features, or documentation enhancements.
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
