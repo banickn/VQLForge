@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from src.schemas.translation import SqlQueryRequest, TranslateApiResponse
 from src.utils.ai_analyzer import analyze_sql_translation_error
 from src.utils.vdb_transformer import transform_vdb_table_qualification
+from src.utils.dual_transformer import transform_dual_function
 from src.schemas.translation import TranslationError
 
 logger = logging.getLogger(__name__)
@@ -30,8 +31,10 @@ def translate_sql_to_vql(request: SqlQueryRequest) -> TranslateApiResponse:
         expression_tree = parse_one(source_sql, dialect=dialect)
         if vdb:  # Only apply transformation if vdb is provided
             expression_tree = expression_tree.transform(transform_vdb_table_qualification, vdb)
-        converted_vql = expression_tree.sql(dialect="denodo", pretty=True)
+        if dialect == "oracle":
+            expression_tree = expression_tree.transform(transform_dual_function)
 
+        converted_vql = expression_tree.sql(dialect="denodo", pretty=True)
         logger.info(f"Successfully translated SQL to VQL. VQL: {converted_vql[:100]}...")
         return TranslateApiResponse(vql=converted_vql)
 
