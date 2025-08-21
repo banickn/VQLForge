@@ -1,5 +1,5 @@
 from typing import List, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class HealthCheck(BaseModel):
@@ -16,5 +16,14 @@ class QueryResponse(BaseModel):
     message: str | None = None
 
 
+class VDBConfigFile(BaseModel):
+    vdbs: List[str] = Field(default_factory=list)  # Changed from List[VDBConfigItem]
+
+
+class VDBResponseItem(BaseModel):
+    value: str
+    label: str
+
+
 class VDBResponse(BaseModel):
-    results: List[Dict[str, str]]
+    results: List[VDBResponseItem]

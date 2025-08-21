@@ -15,19 +15,17 @@ logger = logging.getLogger(__name__)
 
 def _initialize_ai_agent(system_prompt: str, output_type: Type, tools: list[Tool] = []) -> Agent:
     if not settings.GEMINI_API_KEY:
-        logger.error("GEMINI_API_KEY environment variable not set.")
+        logger.error("AI_API_KEY environment variable not set.")
         raise HTTPException(
             status_code=500, detail="AI service configuration error: API key missing."
         )
 
     return Agent(
-        # Consider making model name a config variable
-        "gemini-2.5-flash-preview-04-17",  # "gemini-1.5-flash-latest" might be more current
+        settings.AI_MODEL_NAME,
         system_prompt=system_prompt,
         output_type=output_type,
         deps_type=set[str],
         tools=tools
-        # llm_kwargs={"api_key": settings.GEMINI_API_KEY} # pydantic-ai typically handles GOOGLE_API_KEY env var directly
     )
 
 

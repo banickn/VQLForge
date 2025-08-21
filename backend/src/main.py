@@ -1,14 +1,14 @@
 # src/main.py
 import logging
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import api_router  # Import the main router
 from src.config import settings  # To access settings if needed for app config
 from src.db.session import engine as db_engine, init_db_engine  # To ensure DB is up
+from src.utils.logging_config import setup_logging  # Import the new logging setup
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)  # You can make level configurable via settings
+# Configure logging using the new setup function
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Initialize services
@@ -25,21 +25,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# --- CORS Configuration ---
-origins = [
-    "http://localhost:4999",
-    "http://127.0.0.1:4999",
-    # Add production frontend origins here
-]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-# --- End CORS Configuration ---
+# CORS is now handled by the NGINX reverse proxy.
 
 # Include the main API router
 app.include_router(api_router)
@@ -50,6 +36,3 @@ app.include_router(api_router)
 @app.get("/", tags=["Default"])
 def read_root():
     return {"message": "Welcome to VQLForge Backend!"}
-
-# For UVicorn ASGI server:
-# Run with: uv uvicorn src.main:app --reload
