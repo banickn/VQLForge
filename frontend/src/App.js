@@ -4,10 +4,13 @@ import {
     CssBaseline, AppBar, Toolbar, Typography, Container, Box,
     Button, CircularProgress, Alert,
     AlertTitle, IconButton, Stack, useTheme, Autocomplete, TextField,
-} from '@mui/material'; // Import necessary Material UI components
+} from '@mui/material';
 import DoubleArrowIcon from '@mui/icons-material/DoubleArrow';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { sql } from '@codemirror/lang-sql';
 import { purple, blueGrey } from '@mui/material/colors';
 
@@ -16,7 +19,7 @@ import { fetchVdbs, translateSql, validateSql } from './apiService.js';
 
 // Import Custom Components
 import CodeEditor from './components/Editors/CodeEditor.js';
-import VqlForgeLogo from './Logo.js'; // Import the new logo
+import VqlForgeLogo from './Logo.js';
 
 // --- Import Alert Components ---
 import AiErrorAnalysis from './components/Alerts/AiErrorAnalysis.js';
@@ -34,7 +37,7 @@ function App() {
 
     // --- VDB State ---
     const [actualAvailableVDBs, setActualAvailableVDBs] = useState([]);
-    const [selectedVDB, setSelectedVDB] = useState(null); // Initialize to null
+    const [selectedVDB, setSelectedVDB] = useState(null);
     const [vdbsLoading, setVdbsLoading] = useState(false);
     const [vdbsError, setVdbsError] = useState(null);
 
@@ -44,7 +47,7 @@ function App() {
     const [error, setError] = useState(null);
     const [isValidating, setIsValidating] = useState(false);
     const [validationResult, setValidationResult] = useState(null);
-    
+
     const anyLoading = isLoading || isValidating || vdbsLoading;
 
     const clearValidationState = () => { setValidationResult(null); };
@@ -67,7 +70,7 @@ function App() {
             .catch(err => {
                 console.error("Error fetching VDBs:", err);
                 setVdbsError(err.message || "Could not fetch VDB options.");
-                setActualAvailableVDBs([{ value: 'admin', label: 'Admin' }]); // Set to fallback value on error
+                setActualAvailableVDBs([{ value: 'admin', label: 'Admin' }]);
                 setVdbsLoading(false);
             });
     }, []);
@@ -118,7 +121,7 @@ function App() {
         const requestBody = {
             sql: sourceSql,
             dialect: sourceDialect.value,
-            vdb: selectedVDB.value 
+            vdb: selectedVDB.value
         };
         try {
             const data = await translateSql(requestBody);
@@ -175,15 +178,32 @@ function App() {
 
         try {
             const validationData = await validateSql(sourceSql, vqlWithoutLineBreaks);
+
             if (validationData.validated) {
-                setValidationResult({ status: 'success', message: validationData.message || `VQL syntax check successful!` });
+                setValidationResult({
+                    status: 'success',
+                    message: validationData.message || `VQL syntax check successful!`
+                });
             } else {
-                setValidationResult({ status: 'error', message: validationData.message || 'Validation Failed: Denodo rejected the query syntax/plan.' });
+                // Check if we have error_analysis data
+                if (validationData.error_analysis) {
+                    // Set as AI error with the complete error_analysis object
+                    setValidationResult({
+                        status: 'error_ai',
+                        data: validationData.error_analysis  // Pass the error_analysis object directly
+                    });
+                } else {
+                    // Fallback to regular error
+                    setValidationResult({
+                        status: 'error',
+                        message: validationData.message || 'Validation Failed: Denodo rejected the query syntax/plan.'
+                    });
+                }
             }
 
         } catch (err) {
             console.error("Validation process error:", err);
-            if (err.status === 'error_ai' && err.data) { 
+            if (err.status === 'error_ai' && err.data) {
                 setValidationResult({ status: 'error_ai', data: err.data });
             } else {
                 setValidationResult({
@@ -196,23 +216,51 @@ function App() {
         }
     };
 
-    const alertCloseButton = (onCloseHandler) => (<IconButton aria-label="close" color="inherit" size="small" onClick={onCloseHandler}><CloseIcon fontSize="inherit" /></IconButton>);
+    const getValidationAlertProps = () => {
+        if (!validationResult) return null;
+
+        const status = validationResult.status;
+        if (status === 'success') {
+            return {
+                severity: 'success',
+                icon: <CheckCircleOutlineIcon fontSize="inherit" />,
+                title: 'Validation Successful'
+            };
+        }
+        if (status === 'info') {
+            return {
+                severity: 'info',
+                icon: <InfoOutlinedIcon fontSize="inherit" />,
+                title: 'Validation Info'
+            };
+        }
+        if (status === 'error') {
+            return {
+                severity: 'error',
+                icon: <ErrorOutlineIcon fontSize="inherit" />,
+                title: 'Validation Error'
+            };
+        }
+        return null;
+    };
+
+    const validationAlertProps = getValidationAlertProps();
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
             <CssBaseline />
-            <AppBar 
-                position="static" 
-                elevation={1} 
-                sx={{ 
-                    background: `linear-gradient(90deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`, // Subtle blue to purple gradient
+            <AppBar
+                position="static"
+                elevation={1}
+                sx={{
+                    background: `linear-gradient(90deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
                     borderBottom: `1px solid ${theme.palette.divider}`,
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' // Subtle drop shadow
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
                 }}
             >
                 <Toolbar>
-                    <VqlForgeLogo sx={{ fontSize: '2rem', mr: 2 }} /> {/* Slightly smaller, more margin */}
-                    <Typography variant="h5" component="div" sx={{ fontWeight: 500, flexGrow: 1, color: 'white', letterSpacing: '0.08em' }}> {/* Reduced font weight, adjusted letter spacing */}
+                    <VqlForgeLogo sx={{ fontSize: '2rem', mr: 2 }} />
+                    <Typography variant="h5" component="div" sx={{ fontWeight: 500, flexGrow: 1, color: 'white', letterSpacing: '0.08em' }}>
                         VQLForge
                     </Typography>
                 </Toolbar>
@@ -231,20 +279,18 @@ function App() {
                         <Alert
                             severity="error"
                             onClose={clearErrorState}
-                            action={alertCloseButton(clearErrorState)}
                         >
                             <AlertTitle sx={{ fontWeight: 600 }}>Error</AlertTitle>
                             {error}
                         </Alert>
                     )}
                     {vdbsLoading && !vdbsError && (
-                        <Alert severity="info" icon={<CircularProgress size={20} />}>Loading VDB options...
-</Alert>
+                        <Alert severity="info" icon={<CircularProgress size={20} />}>Loading VDB options...</Alert>
                     )}
                     {vdbsError && (
                         <Alert
                             severity="warning"
-                            action={alertCloseButton(() => setVdbsError(null))}
+                            onClose={() => setVdbsError(null)}
                         >
                             <AlertTitle sx={{ fontWeight: 600 }}>VDB Load Issue</AlertTitle>
                             {vdbsError} - VDB selection might be unavailable or incomplete.
@@ -257,21 +303,18 @@ function App() {
                             onUseVqlSuggestion={handleUseVqlSuggestion}
                         />
                     )}
-                    {validationResult?.status === 'success' && (
-                        <Alert severity="success" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}>
-                            <AlertTitle sx={{ fontWeight: 600 }}>Validation Successful</AlertTitle>
-                            {validationResult.message}
-                        </Alert>
-                    )}
-                    {validationResult?.status === 'info' && (
-                        <Alert severity="info" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}>
-                            <AlertTitle sx={{ fontWeight: 600 }}>Validation Info</AlertTitle>
-                            {validationResult.message}
-                        </Alert>
-                    )}
-                    {validationResult?.status === 'error' && (
-                        <Alert severity="error" onClose={clearValidationState} action={alertCloseButton(clearValidationState)}>
-                            <AlertTitle sx={{ fontWeight: 600 }}>Validation Error</AlertTitle>
+                    {validationAlertProps && (
+                        <Alert
+                            severity={validationAlertProps.severity}
+                            icon={validationAlertProps.icon}
+                            onClose={clearValidationState}
+                            sx={{
+                                boxShadow: theme.shadows[2],
+                                backgroundColor: 'background.paper',
+                                borderLeft: `4px solid ${theme.palette[validationAlertProps.severity].main}`
+                            }}
+                        >
+                            <AlertTitle sx={{ fontWeight: 600 }}>{validationAlertProps.title}</AlertTitle>
                             {validationResult.message}
                         </Alert>
                     )}
@@ -342,34 +385,36 @@ function App() {
                                 />
                             )}
                         />
-                        <Box sx={{ position: 'relative', width: '100%'}}>
+                        <Box sx={{ position: 'relative', width: '100%' }}>
                             <Button variant="contained" color="secondary" onClick={handleConvert} disabled={!sourceSql.trim() || !sourceDialect || !selectedVDB || anyLoading} startIcon={!isLoading ? <DoubleArrowIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600 }}>
                                 {isLoading ? 'Converting...' : 'Convert'}
                             </Button>
                             {isLoading && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
                         </Box>
-                        
-                        <Button
-                            variant="outlined"
-                            color="primary"
-                            onClick={handleValidateQuery}
-                            disabled={
-                                anyLoading ||
-                                !sourceSql.trim() ||
-                                !sourceDialect ||
-                                !selectedVDB ||
-                                !targetSql ||
-                                targetSql === initialTargetSqlPlaceholder ||
-                                targetSql === conversionErrorPlaceholder ||
-                                (error && typeof error === 'object' && error !== null && error.explanation)
-                            }
-                            startIcon={!isValidating ? <VerifiedIcon /> : null}
-                            fullWidth sx={{ height: '56px', fontWeight: 600 }}
-                        >
-                            {isValidating ? 'Validating...' : 'Validate VQL'}
-                        </Button>
-                        {isValidating && (<CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
-                        
+
+                        <Box sx={{ position: 'relative', width: '100%' }}>
+                            <Button
+                                variant="outlined"
+                                color="primary"
+                                onClick={handleValidateQuery}
+                                disabled={
+                                    anyLoading ||
+                                    !sourceSql.trim() ||
+                                    !sourceDialect ||
+                                    !selectedVDB ||
+                                    !targetSql ||
+                                    targetSql === initialTargetSqlPlaceholder ||
+                                    targetSql === conversionErrorPlaceholder ||
+                                    (error && typeof error === 'object' && error !== null && error.explanation)
+                                }
+                                startIcon={!isValidating ? <VerifiedIcon /> : null}
+                                fullWidth sx={{ height: '56px', fontWeight: 600 }}
+                            >
+                                {isValidating ? 'Validating...' : 'Validate VQL'}
+                            </Button>
+                            {isValidating && (<CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                        </Box>
+
                     </Box>
 
                     <Box sx={{ order: { xs: 3, md: 3 }, display: 'flex', width: { xs: '100%', md: '550px' }, minWidth: { md: '550px' }, maxWidth: { md: '550px' }, flexShrink: 0 }}>
@@ -386,7 +431,7 @@ function App() {
             </Container>
 
             <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.1 -
+                <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.1.5 -
                     MIT License
                 </a>
                 </Typography>

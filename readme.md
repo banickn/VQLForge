@@ -54,7 +54,8 @@ Migrating SQL to Denodo's VQL can be a time-consuming and error-prone process. V
     | `DENODO_DB`         | Default Denodo Virtual DataBase (VDB)                                       | AI Validation          | `my_vdb`                    |
     | `DENODO_USER`       | Denodo user with read/execute access to VDBs                                | AI Validation          | `denodo_user`               |
     | `DENODO_PW`         | Password for the Denodo user                                                | AI Validation          | `password`                  |
-    | `AI_API_KEY`        | Google Gemini API Key (e.g., Gemini 1.5 Flash)                              | AI Assistant           | `YOUR_GEMINI_API_KEY`       |
+    | `AI_API_KEY`        | LLM API Key                                                                 | AI Assistant           | `YOUR_AI_API_KEY`           |
+    | `AI_MODEL_NAME`     | Model name (e.g., gemini-2.5-flash)                                         | AI Assistant           | `LLM_MODEL_NAME`            |
     | `APP_NETWORK_NAME`  | Docker network name for connecting to Denodo (if Denodo is also in Docker)  | AI Validation          | `denodo-lab-net`            |
     | `HOST_PROJECT_PATH` | Absolute path to your local VQLForge repository directory.                  | Translation (VDBs)     | `/path/to/your/VQLForge`    |
 

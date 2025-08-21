@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     DENODO_USER: str
     DENODO_PW: str
     GEMINI_API_KEY: str
+    AI_MODEL_NAME: str
 
     DATABASE_URL: str | None = None  # Will be constructed
     APP_VDB_CONF: str

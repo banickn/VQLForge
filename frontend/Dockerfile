@@ -1,3 +1,4 @@
+# frontend/Dockerfile
 # ---- Stage 1: Build ----
 # Use an official Node runtime as a parent image for the build stage
 FROM node:24-alpine AS builder
@@ -30,9 +31,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Expose port 4999 for Nginx
 EXPOSE 4999
 
-# Add a wrapper script
-COPY entrypoint-wrapper.sh /entrypoint-wrapper.sh
-RUN chmod +x /entrypoint-wrapper.sh
-
-# Use the wrapper script as the command
-CMD ["/entrypoint-wrapper.sh"]
+# The wrapper script is no longer needed.
+# The original Nginx command is used directly.
+CMD ["nginx", "-g", "daemon off;"]

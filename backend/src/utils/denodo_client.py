@@ -1,17 +1,26 @@
 import logging
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import Engine, text
 from src.db.session import get_engine  # Use the centralized engine
 
 logger = logging.getLogger(__name__)
 
 
 def get_available_views_from_denodo(vdb_name: str | None = None) -> list[str]:
-    # This needs actual implementation to query Denodo's metadata.
-    # Example: "LIST VIEWS ALL" or query information_schema views
-    # For now, returning a placeholder
-    logger.warning("get_available_views_from_denodo is using placeholder data.")
-    return ["placeholder_view1", f"placeholder_view_in_{vdb_name}" if vdb_name else "placeholder_view2"]
+    engine: Engine = get_engine()
+    vql = "SELECT database_name, name FROM get_views()"
+    try:
+        with engine.connect() as connection:
+            result = connection.execute(text(vql))
+            views: list[dict[str, str]] = [dict(row._mapping) for row in result]
+            logger.info(f"Successfully retrieved Denodo functions: {len(views)} functions found.")
+            return views
+    except Exception as e:
+        logger.error(f"Error executing VQL query '{vql}' to get views: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve views from Denodo: {str(e)}",
+        )
 
 
 def get_denodo_functions_list() -> list[str]:
