@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     DENODO_USER: str
     DENODO_PW: str
     GEMINI_API_KEY: str
+    OPENAI_API_KEY: str
+    AZURE_OPENAI_ENDPOINT: str
     AI_MODEL_NAME: str
 
     DATABASE_URL: str | None = None  # Will be constructed

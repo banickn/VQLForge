@@ -3,6 +3,11 @@ from typing import Type
 from sqlglot import exp, parse_one
 from fastapi import HTTPException
 from pydantic_ai import Agent, RunContext, Tool
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.azure import AzureProvider
 
 from src.config import settings
 from src.schemas.translation import TranslationError
@@ -14,14 +19,28 @@ logger = logging.getLogger(__name__)
 
 
 def _initialize_ai_agent(system_prompt: str, output_type: Type, tools: list[Tool] = []) -> Agent:
-    if not settings.GEMINI_API_KEY:
-        logger.error("AI_API_KEY environment variable not set.")
+    if settings.OPENAI_API_KEY:
+        logger.info("Using OpenAI model.")
+        model = OpenAIModel(
+            settings.AI_MODEL_NAME,
+            provider=AzureProvider(
+                azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+                api_version='2024-12-01-preview',
+                api_key=settings.OPENAI_API_KEY,
+            )
+        )
+    elif settings.GEMINI_API_KEY:
+        logger.info("Using Gemini model.")
+        model = GoogleModel(settings.AI_MODEL_NAME,
+                            provider=GoogleProvider(api_key=settings.GEMINI_API_KEY))
+    else:
+        logger.error("NO AI KEY environment variable set.")
         raise HTTPException(
             status_code=500, detail="AI service configuration error: API key missing."
         )
 
     return Agent(
-        settings.AI_MODEL_NAME,
+        model,
         system_prompt=system_prompt,
         output_type=output_type,
         deps_type=set[str],
