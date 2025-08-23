@@ -8,7 +8,7 @@ It helps accelerate migrations to Denodo by automating SQL-to-VQL conversion.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
 
-![image info](vqlforge.png)
+![image info](vqlforge-autoforge.gif)
 
 ## Why VQLForge?
 
@@ -35,7 +35,6 @@ Migrating SQL to Denodo's VQL can be a time-consuming and error-prone process. V
     *  **Analyze**: If validation fails, the AI agent diagnoses the error, identifying issues like missing views, incorrect functions, or syntax problems.
     *  **Correct**: The agent generates a corrected VQL query based on its analysis.
     *  **Re-Validate**: The agent automatically re-runs validation on the corrected query.
-    * ![agentic mode](vqlforge-agentic.png)
 
 ## Technologies Used
 
