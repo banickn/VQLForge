@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str | None = None  # Will be constructed
     APP_VDB_CONF: str
+
+    # New setting for the agentic loop limit
+    AGENTIC_MAX_LOOPS: int = 3
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     def __init__(self, **values):

@@ -1,6 +1,6 @@
 [project]
 name = "vqlforge"
-version = "0.1.5"
+version = "0.2"
 description = "VQLForge Backend"
 readme = "README.md"
 requires-python = ">=3.12"

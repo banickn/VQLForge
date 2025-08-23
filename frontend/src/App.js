@@ -11,15 +11,19 @@ import CloseIcon from '@mui/icons-material/Close';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { sql } from '@codemirror/lang-sql';
 import { purple, blueGrey } from '@mui/material/colors';
 
 // Import API Service
-import { fetchVdbs, translateSql, validateSql } from './apiService.js';
+import { fetchVdbs, translateSql, validateSql, forgeSql } from './apiService.js';
 
 // Import Custom Components
 import CodeEditor from './components/Editors/CodeEditor.js';
 import VqlForgeLogo from './Logo.js';
+import AgenticStatusDisplay from './components/AgenticStatusDisplay.js';
+import AgenticLogDisplay from './components/AgenticLogDisplay.js';
+
 
 // --- Import Alert Components ---
 import AiErrorAnalysis from './components/Alerts/AiErrorAnalysis.js';
@@ -47,11 +51,22 @@ function App() {
     const [error, setError] = useState(null);
     const [isValidating, setIsValidating] = useState(false);
     const [validationResult, setValidationResult] = useState(null);
+    // --- Agentic Mode State ---
+    const [isAgenticModeActive, setIsAgenticModeActive] = useState(false);
+    const [agenticStatusMessages, setAgenticStatusMessages] = useState([]);
+    const [currentAgenticStep, setCurrentAgenticStep] = useState(null);
+    const [showFinalAgenticLog, setShowFinalAgenticLog] = useState(false);
 
-    const anyLoading = isLoading || isValidating || vdbsLoading;
+
+    const anyLoading = isLoading || isValidating || vdbsLoading || isAgenticModeActive;
 
     const clearValidationState = () => { setValidationResult(null); };
     const clearErrorState = () => { setError(null); };
+    const clearAgenticState = () => {
+        setAgenticStatusMessages([]);
+        setCurrentAgenticStep(null);
+        setShowFinalAgenticLog(false);
+    };
 
     // --- Fetch VDBs ---
     useEffect(() => {
@@ -79,18 +94,21 @@ function App() {
         setSourceSql(value);
         clearErrorState();
         clearValidationState();
+        clearAgenticState();
     }, []);
 
     const handleDialectChange = (event, newValue) => {
         setSourceDialect(newValue);
         clearErrorState();
         clearValidationState();
+        clearAgenticState();
     };
 
     const handleVDBChange = (event, newValue) => {
         setSelectedVDB(newValue);
         clearErrorState();
         clearValidationState();
+        clearAgenticState();
         setTargetSql(initialTargetSqlPlaceholder);
     };
 
@@ -99,6 +117,7 @@ function App() {
         setError(null);
         setTargetSql(initialTargetSqlPlaceholder);
         clearValidationState();
+        clearAgenticState();
     };
     const handleUseVqlSuggestion = (suggestedVql) => {
         setTargetSql(suggestedVql);
@@ -112,6 +131,7 @@ function App() {
         setIsLoading(true);
         clearErrorState();
         clearValidationState();
+        clearAgenticState();
 
         if (!sourceDialect || !selectedVDB) {
             setError("Source Dialect and VDB must be selected.");
@@ -167,6 +187,7 @@ function App() {
         setIsValidating(true);
         clearValidationState();
         clearErrorState();
+        clearAgenticState();
 
         const vqlToValidate = targetSql;
         const vqlWithoutLineBreaks = vqlToValidate.replace(/[\r\n]+/g, ' ').trim();
@@ -185,22 +206,18 @@ function App() {
                     message: validationData.message || `VQL syntax check successful!`
                 });
             } else {
-                // Check if we have error_analysis data
                 if (validationData.error_analysis) {
-                    // Set as AI error with the complete error_analysis object
                     setValidationResult({
                         status: 'error_ai',
-                        data: validationData.error_analysis  // Pass the error_analysis object directly
+                        data: validationData.error_analysis
                     });
                 } else {
-                    // Fallback to regular error
                     setValidationResult({
                         status: 'error',
                         message: validationData.message || 'Validation Failed: Denodo rejected the query syntax/plan.'
                     });
                 }
             }
-
         } catch (err) {
             console.error("Validation process error:", err);
             if (err.status === 'error_ai' && err.data) {
@@ -215,6 +232,77 @@ function App() {
             setIsValidating(false);
         }
     };
+
+    const handleAgenticForge = () => {
+        setIsAgenticModeActive(true);
+        clearErrorState();
+        clearValidationState();
+        setAgenticStatusMessages([]);
+        setCurrentAgenticStep(null);
+        setShowFinalAgenticLog(false);
+        setTargetSql(initialTargetSqlPlaceholder);
+
+        const requestBody = {
+            sql: sourceSql,
+            dialect: sourceDialect.value,
+            vdb: selectedVDB.value,
+        };
+
+        const onMessage = ({ event, data }) => {
+            if (event === 'step') {
+                setCurrentAgenticStep(data);
+                setAgenticStatusMessages(prev => {
+                    const existingIndex = prev.findIndex(step => step.step_name === data.step_name);
+                    if (existingIndex > -1) {
+                        const newSteps = [...prev];
+                        newSteps[existingIndex] = data;
+                        return newSteps;
+                    }
+                    return [...prev, data];
+                });
+            } else if (event === 'result') {
+                const { final_vql, is_valid, final_message, error_analysis, process_log } = data;
+                if (process_log) setAgenticStatusMessages(process_log);
+
+                if (final_vql) {
+                    setTargetSql(final_vql);
+                }
+
+                if (is_valid) {
+                    setValidationResult({ status: 'success', message: final_message });
+                } else {
+                    if (error_analysis) {
+                        if (process_log.some(step => step.step_name === "Translate" && !step.success)) {
+                            setError(error_analysis);
+                        } else {
+                            setValidationResult({ status: 'error_ai', data: error_analysis });
+                        }
+                    } else {
+                        setValidationResult({ status: 'error', message: final_message });
+                    }
+                }
+                setShowFinalAgenticLog(true);
+            } else if (event === 'error') {
+                setError(`Agentic Forge Error: ${data.detail || 'An unknown error occurred.'}`);
+                setTargetSql(conversionErrorPlaceholder);
+            }
+        };
+
+        const onError = (err) => {
+            setError(`Agentic Forge Connection Error: ${err.message}`);
+            setTargetSql(conversionErrorPlaceholder);
+            setIsAgenticModeActive(false);
+        };
+
+        const onClose = () => {
+            setIsAgenticModeActive(false);
+            setCurrentAgenticStep(null);
+            console.log("Agentic stream closed.");
+        };
+
+        forgeSql(requestBody, { onMessage, onError, onClose });
+    };
+
 
     const getValidationAlertProps = () => {
         if (!validationResult) return null;
@@ -268,6 +356,14 @@ function App() {
 
             <Container maxWidth="xl" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                 <Stack spacing={2} sx={{ mb: 3, flexShrink: 0 }}>
+                    {isAgenticModeActive && (
+                        <AgenticStatusDisplay currentStep={currentAgenticStep} history={agenticStatusMessages} />
+                    )}
+
+                    {showFinalAgenticLog && agenticStatusMessages.length > 0 && (
+                        <AgenticLogDisplay log={agenticStatusMessages} onClose={clearAgenticState} />
+                    )}
+
                     {error && typeof error === 'object' && error.explanation && error.sql_suggestion && (
                         <AiErrorAnalysis
                             errorData={error}
@@ -415,6 +511,20 @@ function App() {
                             {isValidating && (<CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
                         </Box>
 
+                        <Box sx={{ position: 'relative', width: '100%' }}>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                onClick={handleAgenticForge}
+                                disabled={anyLoading || !sourceSql.trim() || !sourceDialect || !selectedVDB}
+                                startIcon={!isAgenticModeActive ? <AutoFixHighIcon /> : null}
+                                fullWidth
+                                sx={{ height: '56px', fontWeight: 600 }}
+                            >
+                                {isAgenticModeActive ? 'Working...' : 'Auto-Forge'}
+                            </Button>
+                            {isAgenticModeActive && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                        </Box>
                     </Box>
 
                     <Box sx={{ order: { xs: 3, md: 3 }, display: 'flex', width: { xs: '100%', md: '550px' }, minWidth: { md: '550px' }, maxWidth: { md: '550px' }, flexShrink: 0 }}>
@@ -431,7 +541,7 @@ function App() {
             </Container>
 
             <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.1.5 -
+                <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.2 -
                     MIT License
                 </a>
                 </Typography>

@@ -22,7 +22,7 @@ if not db_engine:
 app = FastAPI(
     title="VQLForge Backend",
     description="The backend to transpile and validate SQL to VQL",
-    version="1.0.0",
+    version="0.2",
 )
 
 # CORS is now handled by the NGINX reverse proxy.

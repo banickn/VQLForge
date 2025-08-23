@@ -10,9 +10,7 @@ from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.azure import AzureProvider
 
 from src.config import settings
-from src.schemas.translation import TranslationError
-from src.schemas.validation import ValidationError
-# Import the Denodo client functions
+from src.schemas.translation import AIAnalysis
 from src.utils.denodo_client import get_available_views_from_denodo, get_denodo_functions_list, get_vdb_names_list, get_view_cols
 
 logger = logging.getLogger(__name__)
@@ -48,57 +46,66 @@ def _initialize_ai_agent(system_prompt: str, output_type: Type, tools: list[Tool
     )
 
 
-def _get_functions() -> list[str]:
+async def _get_functions() -> list[str]:
     """Retrieves a list of available Denodo functions. Use this tool when an error indicates a function was not found or has incorrect arity."""
     logger.info("Executing _get_functions tool")
-    return get_denodo_functions_list()
+    return await get_denodo_functions_list()
 
 
-def _get_views() -> list[str]:
+async def _get_views() -> list[str]:
     """Retrieves a list of available Denodo views. Use this tool when an error suggests a table or view is missing or misspelled."""
-    return get_available_views_from_denodo()
+    return await get_available_views_from_denodo()
 
 
-def _get_vdbs() -> list[str]:
+async def _get_vdbs() -> list[str]:
     """Retrieves a list of available Denodo Virtual DataBases (VDBs). Use this tool when an error refers to an invalid database name."""
-    return get_vdb_names_list()
+    return await get_vdb_names_list()
 
 
-def _get_view_metadata(ctx: RunContext[set[str]]) -> list[dict[str, str]]:
+async def _get_view_metadata(ctx: RunContext[set[str]]) -> list[dict[str, str]]:
     """Retrieves a list of columns for the views. Use this tool when an error refers to field not found in view error."""
-    return get_view_cols(ctx.deps)
+    return await get_view_cols(ctx.deps)
 
 
 def _extract_tables(input_vql: str) -> set[str]:
     tables = set()
-    for table in parse_one(input_vql).find_all(exp.Table):
-        tables.add(table.name)
+    try:
+        for table in parse_one(input_vql).find_all(exp.Table):
+            tables.add(table.name)
+    except Exception:
+        # Ignore parsing errors here, as the input might be invalid VQL
+        pass
     return tables
 
 
-def analyze_vql_validation_error(error: str, input_vql: str) -> ValidationError:
-
+async def analyze_vql_validation_error(error: str, input_vql: str) -> AIAnalysis:
     agent = _initialize_ai_agent(
-        "You are an SQL Validation assistant for Denodo VQL", ValidationError, tools=[
+        "You are an SQL Validation assistant for Denodo VQL", AIAnalysis, tools=[
             Tool(_get_functions), Tool(_get_views), Tool(_get_vdbs), Tool(_get_view_metadata)]
     )
 
-    prompt: str = f"""You are an expert Denodo VQL Assistant. Your primary goal is to analyze Denodo VQL validation errors, explain them concisely, and provide accurate, corrected VQL suggestions.
-                Explain concisely why the `Input VQL` failed based on the `Error` and provide the corrected `Valid VQL Suggestion`.
-                Do not explain what you are doing, just provide the explanation and the suggestion directly.
+    prompt: str = f"""You are an expert Denodo VQL Assistant. Your task is to analyze Denodo VQL validation errors.
+                1.  Categorize the error into one of the following types: "Missing View", "Missing Column", "Invalid Function", "Syntax Error", "Permissions Error", "Other". Set this category in the `error_category` field.
+                2.  Explain concisely in the `explanation` field why the `Input VQL` failed based on the `Error`.
+                3.  Provide an accurate, corrected VQL suggestion in the `sql_suggestion` field.
 
-                If the table/view is missing, use the _get_views tool to determine which views are available and use the best guess in your suggestion.
-                If you get a 'Function <placeholder> with arity not found' exception, use _get_functions tool to check for available Denodo functions.
-                If a database name (VDB) is invalid, use _get_vdbs tool to check for database names. Suggest one that is similar or advise the user to check.
+                Do not explain what you are doing in the explanation, just provide the direct cause of the error.
+
+                If a table/view is missing, use the _get_views tool to find available views and suggest a likely replacement.
+                If a function is not found, use the _get_functions tool to check for available Denodo functions.
+                If a database name (VDB) is invalid, use _get_vdbs tool to check for valid database names.
+
                 **ERROR:**
                 {error}
+
                 **Input VQL:**
                 ```vql
                 {input_vql}```"""
     vql_tables: set[str] = _extract_tables(input_vql)
     try:
-        response = agent.run_sync(prompt, deps=vql_tables)
+        response = await agent.run(prompt, deps=vql_tables)
         if response and response.output:
+            logger.info(f"AI Validation Analysis Category: {response.output.error_category}")
             logger.info(f"AI Validation Analysis Explanation: {response.output.explanation}")
             logger.info(f"AI Validation Analysis Suggestion: {response.output.sql_suggestion}")
             return response.output
@@ -114,21 +121,26 @@ def analyze_vql_validation_error(error: str, input_vql: str) -> ValidationError:
         )
 
 
-def analyze_sql_translation_error(exception_message: str, input_sql: str) -> TranslationError:
+async def analyze_sql_translation_error(exception_message: str, input_sql: str) -> AIAnalysis:
     agent = _initialize_ai_agent(
-        "You are an SQL Translation assistant, focusing on transpiling to Denodo VQL", TranslationError
+        "You are an SQL Translation assistant, focusing on transpiling to Denodo VQL", AIAnalysis
     )
 
     prompt = f"""Analyze the SQL parsing/translation error.
-                Explain concisely why the `Input SQL` failed based on the `Error` and provide a corrected `Valid SQL Suggestion` that would be parsable by the original dialect or a hint for VQL.
+                1. Categorize the error as "Translation Syntax Error". Set this in the `error_category` field.
+                2. Explain concisely in the `explanation` field why the `Input SQL` failed based on the `Error`.
+                3. Provide a corrected `Valid SQL Suggestion` in the `sql_suggestion` field that would be parsable by the original dialect or a hint for VQL.
+                
                 Do not use ```sql markdown for the corrected SQL response. Do not explain what you are doing, just provide the explanation and the suggestion directly.
+
                 **ERROR:**
                 {exception_message}
+
                 **Input SQL:**
                 ```sql
                 {input_sql}```"""
     try:
-        response = agent.run_sync(prompt)
+        response = await agent.run(prompt)
         if response and response.output:
             logger.info(f"AI Translation Analysis Explanation: {response.output.explanation}")
             logger.info(f"AI Translation Analysis Suggestion: {response.output.sql_suggestion}")

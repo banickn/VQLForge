@@ -72,3 +72,69 @@ export const validateSql = async (sql, vql) => {
         return validationData;
     }
 };
+
+export const forgeSql = async (requestBody, { onMessage, onError, onClose }) => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/forge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+            body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Server responded with ${response.status}: ${errorText}`);
+        }
+
+        if (!response.body) {
+            throw new Error("Response body is missing");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) {
+                break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split('\n\n');
+
+            for (let i = 0; i < parts.length - 1; i++) {
+                const part = parts[i];
+                if (!part) continue;
+
+                let event = 'message'; // Default event type
+                let data = '';
+
+                const eventMatch = part.match(/^event: (.*)$/m);
+                if (eventMatch) {
+                    event = eventMatch[1];
+                }
+
+                const dataMatch = part.match(/^data: (.*)$/m);
+                if (dataMatch) {
+                    data = dataMatch[1];
+                }
+
+                try {
+                    const parsedData = JSON.parse(data);
+                    onMessage({ event, data: parsedData });
+                } catch (e) {
+                    console.error("Failed to parse SSE data:", data, e);
+                    onError(new Error("Failed to parse incoming data stream."));
+                }
+            }
+            buffer = parts[parts.length - 1];
+        }
+
+    } catch (err) {
+        console.error("Error during agentic forge stream:", err);
+        onError(err);
+    } finally {
+        onClose();
+    }
+};

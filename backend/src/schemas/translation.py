@@ -12,12 +12,13 @@ class VqlQueryResponse(BaseModel):  # If still used directly anywhere
     vql: str
 
 
-class TranslationError(BaseModel):
+class AIAnalysis(BaseModel):
     explanation: str
     sql_suggestion: str
+    error_category: Optional[str] = None
 
 
 class TranslateApiResponse(BaseModel):
     vql: str | None = None
-    error_analysis: Optional[TranslationError] = None
+    error_analysis: Optional[AIAnalysis] = None
     message: str | None = None

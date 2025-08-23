@@ -1,21 +1,14 @@
 from typing import Optional
 from pydantic import BaseModel
-from src.schemas.translation import TranslationError  # If it's the same structure
-
-# If ValidationError is truly distinct from TranslationError, define it separately
-
-
-class ValidationError(BaseModel):
-    explanation: str
-    sql_suggestion: str
+from src.schemas.translation import AIAnalysis  # Use the unified error model
 
 
 class VqlValidateRequest(BaseModel):
-    sql: str  # Assuming this was meant to be vql or just generic sql to validate
+    sql: str  # The original SQL, for context if needed
     vql: str  # The VQL to validate
 
 
 class VqlValidationApiResponse(BaseModel):
     validated: bool
-    error_analysis: Optional[ValidationError] = None
+    error_analysis: Optional[AIAnalysis] = None  # Changed from TranslationError to AIAnalysis
     message: Optional[str] = None
