@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from src.schemas.agent import AgenticModeRequest, AgenticModeResponse, AgentStep
 from src.services.translation_service import run_translation
 from src.services.validation_service import run_validation
+from src.utils.ai_analyzer import explain_vql_differences
 from src.config import settings
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,33 @@ async def format_sse(data: dict, event: str | None = None) -> str:
     if event:
         return f"event: {event}\ndata: {payload}\n\n"
     return f"data: {payload}\n\n"
+
+
+def format_explanation_as_markdown(explanation: str) -> str:
+    """
+    Formats the AI explanation into better structured markdown.
+    This assumes the explanation comes as structured text that we can enhance.
+    """
+    if not explanation:
+        return explanation
+
+    # If the explanation is already well-formatted, return as-is
+    if any(marker in explanation for marker in ['##', '- ', '* ', '\n- ', '\n* ']):
+        return explanation
+
+    # Otherwise, try to structure it better
+    lines = explanation.split('\n')
+    formatted_lines = []
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            formatted_lines.append('')
+            continue
+        else:
+            formatted_lines.append(line)
+
+    return '\n'.join(formatted_lines)
 
 
 @router.post("/forge", tags=["VQL Forge"])
@@ -59,9 +87,9 @@ async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
                 loop_count = i + 1
 
                 # Validation Step
-                validation_step_name = "Validate" if i == 0 else f"Re-Validate (Attempt {loop_count})"
+                validation_step_name = "Validate" if i == 0 else f"Re-Validate (Step {loop_count})"
                 validation_step = AgentStep(step_name=validation_step_name,
-                                            details=f"Validating VQL (Attempt {loop_count})...", success=True)
+                                            details=f"Validating VQL (Step {loop_count})...", success=True)
                 process_log.append(validation_step)
                 yield await format_sse(validation_step.model_dump(), event="step")
 
@@ -70,6 +98,31 @@ async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
                 if validation_result.validated:
                     validation_step.details = "Validation successful."
                     yield await format_sse(validation_step.model_dump(), event="step")
+
+                    # Explain Differences
+                    explain_step = AgentStep(
+                        step_name="Explain",
+                        details="Analyzing differences between source SQL and final VQL...",
+                        success=True
+                    )
+                    process_log.append(explain_step)
+                    yield await format_sse(explain_step.model_dump(), event="step")
+
+                    raw_explanation = await explain_vql_differences(
+                        source_sql=request.sql,
+                        source_dialect=request.dialect,
+                        final_vql=current_vql
+                    )
+
+                    # Format the explanation with better structure
+                    formatted_explanation = format_explanation_as_markdown(raw_explanation)
+
+                    # Add a header to make it clearer
+                    final_explanation = f"## Key Differences Between Source SQL and Final VQL\n\n{formatted_explanation}"
+
+                    explain_step.details = final_explanation
+                    yield await format_sse(explain_step.model_dump(), event="step")
+
                     final_success_result = AgenticModeResponse(
                         final_vql=current_vql, is_valid=True, process_log=process_log,
                         final_message="Agentic process complete. The VQL is valid."
@@ -106,12 +159,19 @@ async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
 
                 # AI Analysis & Correction Step
                 analysis_step = AgentStep(
-                    step_name=f"Analyze (Attempt {loop_count})", details="AI is analyzing the error to find a correction...", success=True)
+                    step_name=f"Analyze (Step {loop_count})",
+                    details="AI is analyzing the error to find a correction...",
+                    success=True
+                )
                 process_log.append(analysis_step)
                 yield await format_sse(analysis_step.model_dump(), event="step")
 
                 correction_step = AgentStep(
-                    step_name=f"Correct (Attempt {loop_count})", details="AI provided a corrected VQL.", success=True, output=error_analysis.sql_suggestion)
+                    step_name=f"Correct (Step {loop_count})",
+                    details="AI provided a corrected VQL.",
+                    success=True,
+                    output=error_analysis.sql_suggestion
+                )
                 process_log.append(correction_step)
                 yield await format_sse(correction_step.model_dump(), event="step")
 

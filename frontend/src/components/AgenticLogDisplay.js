@@ -23,7 +23,7 @@ function AgenticLogDisplay({ log, onClose }) {
             elevation={4}
             sx={{
                 backgroundColor: '#282c34', // Match CodeMirror oneDark theme
-                color: 'white',
+                color: 'white', // Base color for all text
                 borderRadius: 2,
                 overflow: 'hidden',
                 border: '1px solid #444654'
@@ -50,15 +50,47 @@ function AgenticLogDisplay({ log, onClose }) {
             </Box>
 
             <Box sx={{ p: 2 }}>
-                <Stack spacing={1.5}>
+                <Stack spacing={1}> {/* Reduced spacing for a tighter list */}
                     {log.map((step, index) => (
-                        <Box key={index} display="flex" alignItems="center" gap={1}>
+                        <Box key={index} display="flex" alignItems="flex-start" gap={1.5}>
                             {step.success ? (
-                                <CheckCircleOutlineIcon fontSize="small" sx={{ color: theme.palette.success.light }} />
+                                <CheckCircleOutlineIcon fontSize="small" sx={{ color: theme.palette.success.light, mt: '3px' }} />
                             ) : (
-                                <ErrorOutlineIcon fontSize="small" sx={{ color: theme.palette.error.light }} />
+                                <ErrorOutlineIcon fontSize="small" sx={{ color: theme.palette.error.light, mt: '3px' }} />
                             )}
-                            <Typography variant="body2"><strong>{step.step_name}:</strong> {step.details}</Typography>
+
+                            {step.step_name === 'Explain' ? (
+                                // Special formatting for the "Explain" step with bold title
+                                <Box sx={{ flex: 1 }}>
+                                    <Typography variant="body2" sx={{ opacity: 0.9 }}><strong>{step.step_name}:</strong></Typography>
+                                    {step.details.split('\n').filter(line => line.trim() !== '').map((line, lineIndex) => {
+                                        const trimmedLine = line.trim();
+                                        if (trimmedLine.startsWith('## ')) {
+                                            return (
+                                                <Typography key={lineIndex} variant="body2" sx={{ fontWeight: 'bold', mt: 1, mb: 0.5, opacity: 0.9 }}>
+                                                    {trimmedLine.substring(3)}
+                                                </Typography>
+                                            );
+                                        }
+                                        if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+                                            return (
+                                                <Box key={lineIndex} sx={{ display: 'flex', alignItems: 'flex-start', pl: 2, mt: 0.5 }}>
+                                                    <Typography sx={{ mr: 1.5, lineHeight: '24px', opacity: 0.9 }}>•</Typography>
+                                                    <Typography variant="body2" sx={{ flex: 1, whiteSpace: 'pre-wrap', opacity: 0.9 }}>
+                                                        {trimmedLine.substring(2)}
+                                                    </Typography>
+                                                </Box>
+                                            );
+                                        }
+                                        return <Typography key={lineIndex} variant="body2" sx={{ whiteSpace: 'pre-wrap', mt: 0.5, opacity: 0.9 }}>{line}</Typography>;
+                                    })}
+                                </Box>
+                            ) : (
+                                // Inline rendering for all other steps with regular-weight title
+                                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', opacity: 0.9 }}>
+                                    {`${step.step_name}: ${step.details}`}
+                                </Typography>
+                            )}
                         </Box>
                     ))}
                 </Stack>

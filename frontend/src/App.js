@@ -1,4 +1,3 @@
-// --- At the top of App.js ---
 import React, { useState, useCallback, useEffect } from 'react';
 import {
     CssBaseline, AppBar, Toolbar, Typography, Container, Box,
@@ -23,6 +22,7 @@ import CodeEditor from './components/Editors/CodeEditor.js';
 import VqlForgeLogo from './Logo.js';
 import AgenticStatusDisplay from './components/AgenticStatusDisplay.js';
 import AgenticLogDisplay from './components/AgenticLogDisplay.js';
+import { useToast, ToastContainer } from './components/Toast/Toast.js';
 
 
 // --- Import Alert Components ---
@@ -37,6 +37,7 @@ const conversionErrorPlaceholder = '-- Conversion Error --';
 
 function App() {
     const theme = useTheme();
+    const toast = useToast();
     const [sourceDialect, setSourceDialect] = useState(availableDialects[0]);
 
     // --- VDB State ---
@@ -201,10 +202,30 @@ function App() {
             const validationData = await validateSql(sourceSql, vqlWithoutLineBreaks);
 
             if (validationData.validated) {
-                setValidationResult({
-                    status: 'success',
-                    message: validationData.message || `VQL syntax check successful!`
-                });
+                const message = validationData.message || `VQL syntax check successful!`;
+
+                // Enhanced toast with custom Accept/Refuse actions
+                const actions = [
+                    {
+                        label: 'Accept',
+                        onClick: () => {
+                            clearValidationState();
+                            console.log('Validation accepted by user');
+                        },
+                        primary: true
+                    },
+                    {
+                        label: 'Refuse',
+                        onClick: () => {
+                            clearValidationState();
+                            setTargetSql(initialTargetSqlPlaceholder);
+                            console.log('Validation refused by user');
+                        },
+                        primary: false
+                    }
+                ];
+
+                toast.success(message, 'Validation Successful', 12000, actions);
             } else {
                 if (validationData.error_analysis) {
                     setValidationResult({
@@ -232,6 +253,7 @@ function App() {
             setIsValidating(false);
         }
     };
+
 
     const handleAgenticForge = () => {
         setIsAgenticModeActive(true);
@@ -269,7 +291,25 @@ function App() {
                 }
 
                 if (is_valid) {
-                    setValidationResult({ status: 'success', message: final_message });
+                    const actions = [
+                        {
+                            label: 'Accept',
+                            onClick: () => {
+                                console.log('Auto-Forge result accepted');
+                            },
+                            primary: true
+                        },
+                        {
+                            label: 'Retry',
+                            onClick: () => {
+                                setTargetSql(initialTargetSqlPlaceholder);
+                                console.log('Auto-Forge result rejected, ready for retry');
+                            },
+                            primary: false
+                        }
+                    ];
+
+                    toast.success(final_message, 'Auto-Forge Successful', 12000, actions);
                 } else {
                     if (error_analysis) {
                         if (process_log.some(step => step.step_name === "Translate" && !step.success)) {
@@ -308,13 +348,7 @@ function App() {
         if (!validationResult) return null;
 
         const status = validationResult.status;
-        if (status === 'success') {
-            return {
-                severity: 'success',
-                icon: <CheckCircleOutlineIcon fontSize="inherit" />,
-                title: 'Validation Successful'
-            };
-        }
+
         if (status === 'info') {
             return {
                 severity: 'info',
@@ -335,218 +369,222 @@ function App() {
     const validationAlertProps = getValidationAlertProps();
 
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-            <CssBaseline />
-            <AppBar
-                position="static"
-                elevation={1}
-                sx={{
-                    background: `linear-gradient(90deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-                }}
-            >
-                <Toolbar>
-                    <VqlForgeLogo sx={{ fontSize: '2rem', mr: 2 }} />
-                    <Typography variant="h5" component="div" sx={{ fontWeight: 500, flexGrow: 1, color: 'white', letterSpacing: '0.08em' }}>
-                        VQLForge
-                    </Typography>
-                </Toolbar>
-            </AppBar>
-
-            <Container maxWidth="xl" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-                <Stack spacing={2} sx={{ mb: 3, flexShrink: 0 }}>
-                    {isAgenticModeActive && (
-                        <AgenticStatusDisplay currentStep={currentAgenticStep} history={agenticStatusMessages} />
-                    )}
-
-                    {showFinalAgenticLog && agenticStatusMessages.length > 0 && (
-                        <AgenticLogDisplay log={agenticStatusMessages} onClose={clearAgenticState} />
-                    )}
-
-                    {error && typeof error === 'object' && error.explanation && error.sql_suggestion && (
-                        <AiErrorAnalysis
-                            errorData={error}
-                            onApplySuggestion={handleApplySuggestion}
-                            onDismiss={handleDismissError}
-                        />
-                    )}
-                    {error && typeof error === 'string' && (
-                        <Alert
-                            severity="error"
-                            onClose={clearErrorState}
-                        >
-                            <AlertTitle sx={{ fontWeight: 600 }}>Error</AlertTitle>
-                            {error}
-                        </Alert>
-                    )}
-                    {vdbsLoading && !vdbsError && (
-                        <Alert severity="info" icon={<CircularProgress size={20} />}>Loading VDB options...</Alert>
-                    )}
-                    {vdbsError && (
-                        <Alert
-                            severity="warning"
-                            onClose={() => setVdbsError(null)}
-                        >
-                            <AlertTitle sx={{ fontWeight: 600 }}>VDB Load Issue</AlertTitle>
-                            {vdbsError} - VDB selection might be unavailable or incomplete.
-                        </Alert>
-                    )}
-                    {validationResult?.status === 'error_ai' && validationResult.data && (
-                        <AiValidationErrorAnalysis
-                            errorData={validationResult.data}
-                            onDismiss={clearValidationState}
-                            onUseVqlSuggestion={handleUseVqlSuggestion}
-                        />
-                    )}
-                    {validationAlertProps && (
-                        <Alert
-                            severity={validationAlertProps.severity}
-                            icon={validationAlertProps.icon}
-                            onClose={clearValidationState}
-                            sx={{
-                                boxShadow: theme.shadows[2],
-                                backgroundColor: 'background.paper',
-                                borderLeft: `4px solid ${theme.palette[validationAlertProps.severity].main}`
-                            }}
-                        >
-                            <AlertTitle sx={{ fontWeight: 600 }}>{validationAlertProps.title}</AlertTitle>
-                            {validationResult.message}
-                        </Alert>
-                    )}
-                </Stack>
-
-                <Box
-                    display="flex"
-                    flexDirection={{ xs: 'column', md: 'row' }}
-                    gap={2.5}
-                    alignItems={{ xs: 'center', md: 'stretch' }}
-                    sx={{ flexGrow: 1 }}
+        <>
+            <ToastContainer toasts={toast.toasts} onRemoveToast={toast.removeToast} />
+            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
+                <CssBaseline />
+                <AppBar
+                    position="static"
+                    elevation={1}
+                    sx={{
+                        background: `linear-gradient(90deg, ${theme.palette.primary.dark} 0%, ${theme.palette.secondary.dark} 100%)`,
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                    }}
                 >
-                    <Box sx={{ order: { xs: 2, md: 1 }, display: 'flex', width: '100%', [theme.breakpoints.up('md')]: { flexGrow: 1, minWidth: '300px' } }}>
-                        <CodeEditor
-                            title={`Source (${sourceDialect ? sourceDialect.label : 'Select Dialect'})`}
-                            borderColor={theme.palette.primary.main}
-                            value={sourceSql}
-                            onChange={onSourceChange}
-                            extensions={editorExtensions}
-                            loading={anyLoading}
-                        />
-                    </Box>
+                    <Toolbar>
+                        <VqlForgeLogo sx={{ fontSize: '2rem', mr: 2 }} />
+                        <Typography variant="h5" component="div" sx={{ fontWeight: 500, flexGrow: 1, color: 'white', letterSpacing: '0.08em' }}>
+                            VQLForge
+                        </Typography>
+                    </Toolbar>
+                </AppBar>
 
-                    <Box sx={{ order: { xs: 1, md: 2 }, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 2, pt: { xs: 2, md: 0 }, width: { xs: '100%', md: '220px' }, flexShrink: 0 }}>
-                        <Autocomplete
-                            disablePortal
-                            id="source-dialect-autocomplete"
-                            options={availableDialects}
-                            getOptionLabel={(option) => option.label || ""}
-                            value={sourceDialect}
-                            onChange={handleDialectChange}
-                            isOptionEqualToValue={(option, value) => option?.value === value?.value}
-                            disabled={anyLoading}
-                            fullWidth
-                            renderInput={(params) => <TextField {...params} label="Source Dialect" />}
-                            renderOption={(props, option) => (
-                                <Box component="li" sx={{ '& > img': { mr: 2, flexShrink: 0 } }} {...props}>
-                                    {option.label}
-                                </Box>
-                            )}
-                        />
-                        <Autocomplete
-                            disablePortal
-                            id="vdb-autocomplete"
-                            options={actualAvailableVDBs}
-                            loading={vdbsLoading}
-                            noOptionsText={vdbsError ? "Using fallback VDB" : (vdbsLoading ? "Loading..." : "No VDBs configured")}
-                            getOptionLabel={(option) => option.label || ""}
-                            value={selectedVDB}
-                            onChange={handleVDBChange}
-                            isOptionEqualToValue={(option, value) => option?.value === value?.value}
-                            disabled={anyLoading}
-                            fullWidth
-                            renderInput={(params) => (
-                                <TextField
-                                    {...params}
-                                    label="VDB"
-                                    error={!!vdbsError}
-                                    InputProps={{
-                                        ...params.InputProps,
-                                        endAdornment: (
-                                            <React.Fragment>
-                                                {vdbsLoading ? <CircularProgress color="inherit" size={20} /> : null}
-                                                {params.InputProps.endAdornment}
-                                            </React.Fragment>
-                                        ),
-                                    }}
-                                />
-                            )}
-                        />
-                        <Box sx={{ position: 'relative', width: '100%' }}>
-                            <Button variant="contained" color="secondary" onClick={handleConvert} disabled={!sourceSql.trim() || !sourceDialect || !selectedVDB || anyLoading} startIcon={!isLoading ? <DoubleArrowIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600 }}>
-                                {isLoading ? 'Converting...' : 'Convert'}
-                            </Button>
-                            {isLoading && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
-                        </Box>
+                <Container maxWidth="xl" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+                    <Stack spacing={2} sx={{ mb: 3, flexShrink: 0 }}>
+                        {isAgenticModeActive && (
+                            <AgenticStatusDisplay currentStep={currentAgenticStep} history={agenticStatusMessages} />
+                        )}
 
-                        <Box sx={{ position: 'relative', width: '100%' }}>
-                            <Button
-                                variant="outlined"
-                                color="primary"
-                                onClick={handleValidateQuery}
-                                disabled={
-                                    anyLoading ||
-                                    !sourceSql.trim() ||
-                                    !sourceDialect ||
-                                    !selectedVDB ||
-                                    !targetSql ||
-                                    targetSql === initialTargetSqlPlaceholder ||
-                                    targetSql === conversionErrorPlaceholder ||
-                                    (error && typeof error === 'object' && error !== null && error.explanation)
-                                }
-                                startIcon={!isValidating ? <VerifiedIcon /> : null}
-                                fullWidth sx={{ height: '56px', fontWeight: 600 }}
+                        {showFinalAgenticLog && agenticStatusMessages.length > 0 && (
+                            <AgenticLogDisplay log={agenticStatusMessages} onClose={clearAgenticState} />
+                        )}
+
+                        {error && typeof error === 'object' && error.explanation && error.sql_suggestion && (
+                            <AiErrorAnalysis
+                                errorData={error}
+                                onApplySuggestion={handleApplySuggestion}
+                                onDismiss={handleDismissError}
+                            />
+                        )}
+                        {error && typeof error === 'string' && (
+                            <Alert
+                                severity="error"
+                                onClose={clearErrorState}
                             >
-                                {isValidating ? 'Validating...' : 'Validate VQL'}
-                            </Button>
-                            {isValidating && (<CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                                <AlertTitle sx={{ fontWeight: 600 }}>Error</AlertTitle>
+                                {error}
+                            </Alert>
+                        )}
+                        {vdbsLoading && !vdbsError && (
+                            <Alert severity="info" icon={<CircularProgress size={20} />}>Loading VDB options...</Alert>
+                        )}
+                        {vdbsError && (
+                            <Alert
+                                severity="warning"
+                                onClose={() => setVdbsError(null)}
+                            >
+                                <AlertTitle sx={{ fontWeight: 600 }}>VDB Load Issue</AlertTitle>
+                                {vdbsError} - VDB selection might be unavailable or incomplete.
+                            </Alert>
+                        )}
+
+                        {validationResult?.status === 'error_ai' && validationResult.data && (
+                            <AiValidationErrorAnalysis
+                                errorData={validationResult.data}
+                                onDismiss={clearValidationState}
+                                onUseVqlSuggestion={handleUseVqlSuggestion}
+                            />
+                        )}
+                        {validationAlertProps && (
+                            <Alert
+                                severity={validationAlertProps.severity}
+                                icon={validationAlertProps.icon}
+                                onClose={clearValidationState}
+                                sx={{
+                                    boxShadow: theme.shadows[2],
+                                    backgroundColor: 'background.paper',
+                                    borderLeft: `4px solid ${theme.palette[validationAlertProps.severity].main}`
+                                }}
+                            >
+                                <AlertTitle sx={{ fontWeight: 600 }}>{validationAlertProps.title}</AlertTitle>
+                                {validationResult.message}
+                            </Alert>
+                        )}
+                    </Stack>
+
+                    <Box
+                        display="flex"
+                        flexDirection={{ xs: 'column', md: 'row' }}
+                        gap={2.5}
+                        alignItems={{ xs: 'center', md: 'stretch' }}
+                        sx={{ flexGrow: 1 }}
+                    >
+                        <Box sx={{ order: { xs: 2, md: 1 }, display: 'flex', width: '100%', [theme.breakpoints.up('md')]: { flexGrow: 1, minWidth: '300px' } }}>
+                            <CodeEditor
+                                title={`Source (${sourceDialect ? sourceDialect.label : 'Select Dialect'})`}
+                                borderColor={theme.palette.primary.main}
+                                value={sourceSql}
+                                onChange={onSourceChange}
+                                extensions={editorExtensions}
+                                loading={anyLoading}
+                            />
                         </Box>
 
-                        <Box sx={{ position: 'relative', width: '100%' }}>
-                            <Button
-                                variant="contained"
-                                color="primary"
-                                onClick={handleAgenticForge}
-                                disabled={anyLoading || !sourceSql.trim() || !sourceDialect || !selectedVDB}
-                                startIcon={!isAgenticModeActive ? <AutoFixHighIcon /> : null}
+                        <Box sx={{ order: { xs: 1, md: 2 }, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 2, pt: { xs: 2, md: 0 }, width: { xs: '100%', md: '220px' }, flexShrink: 0 }}>
+                            <Autocomplete
+                                disablePortal
+                                id="source-dialect-autocomplete"
+                                options={availableDialects}
+                                getOptionLabel={(option) => option.label || ""}
+                                value={sourceDialect}
+                                onChange={handleDialectChange}
+                                isOptionEqualToValue={(option, value) => option?.value === value?.value}
+                                disabled={anyLoading}
                                 fullWidth
-                                sx={{ height: '56px', fontWeight: 600 }}
-                            >
-                                {isAgenticModeActive ? 'Working...' : 'Auto-Forge'}
-                            </Button>
-                            {isAgenticModeActive && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                                renderInput={(params) => <TextField {...params} label="Source Dialect" />}
+                                renderOption={(props, option) => (
+                                    <Box component="li" sx={{ '& > img': { mr: 2, flexShrink: 0 } }} {...props}>
+                                        {option.label}
+                                    </Box>
+                                )}
+                            />
+                            <Autocomplete
+                                disablePortal
+                                id="vdb-autocomplete"
+                                options={actualAvailableVDBs}
+                                loading={vdbsLoading}
+                                noOptionsText={vdbsError ? "Using fallback VDB" : (vdbsLoading ? "Loading..." : "No VDBs configured")}
+                                getOptionLabel={(option) => option.label || ""}
+                                value={selectedVDB}
+                                onChange={handleVDBChange}
+                                isOptionEqualToValue={(option, value) => option?.value === value?.value}
+                                disabled={anyLoading}
+                                fullWidth
+                                renderInput={(params) => (
+                                    <TextField
+                                        {...params}
+                                        label="VDB"
+                                        error={!!vdbsError}
+                                        InputProps={{
+                                            ...params.InputProps,
+                                            endAdornment: (
+                                                <React.Fragment>
+                                                    {vdbsLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                                                    {params.InputProps.endAdornment}
+                                                </React.Fragment>
+                                            ),
+                                        }}
+                                    />
+                                )}
+                            />
+                            <Box sx={{ position: 'relative', width: '100%' }}>
+                                <Button variant="contained" color="secondary" onClick={handleConvert} disabled={!sourceSql.trim() || !sourceDialect || !selectedVDB || anyLoading} startIcon={!isLoading ? <DoubleArrowIcon /> : null} fullWidth sx={{ height: '56px', fontWeight: 600 }}>
+                                    {isLoading ? 'Converting...' : 'Convert'}
+                                </Button>
+                                {isLoading && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                            </Box>
+
+                            <Box sx={{ position: 'relative', width: '100%' }}>
+                                <Button
+                                    variant="outlined"
+                                    color="primary"
+                                    onClick={handleValidateQuery}
+                                    disabled={
+                                        anyLoading ||
+                                        !sourceSql.trim() ||
+                                        !sourceDialect ||
+                                        !selectedVDB ||
+                                        !targetSql ||
+                                        targetSql === initialTargetSqlPlaceholder ||
+                                        targetSql === conversionErrorPlaceholder ||
+                                        (error && typeof error === 'object' && error !== null && error.explanation)
+                                    }
+                                    startIcon={!isValidating ? <VerifiedIcon /> : null}
+                                    fullWidth sx={{ height: '56px', fontWeight: 600 }}
+                                >
+                                    {isValidating ? 'Validating...' : 'Validate VQL'}
+                                </Button>
+                                {isValidating && (<CircularProgress size={24} color="primary" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                            </Box>
+
+                            <Box sx={{ position: 'relative', width: '100%' }}>
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    onClick={handleAgenticForge}
+                                    disabled={anyLoading || !sourceSql.trim() || !sourceDialect || !selectedVDB}
+                                    startIcon={!isAgenticModeActive ? <AutoFixHighIcon /> : null}
+                                    fullWidth
+                                    sx={{ height: '56px', fontWeight: 600 }}
+                                >
+                                    {isAgenticModeActive ? 'Working...' : 'Auto-Forge'}
+                                </Button>
+                                {isAgenticModeActive && (<CircularProgress size={24} color="inherit" sx={{ position: 'absolute', top: '50%', left: '50%', marginTop: '-12px', marginLeft: '-12px' }} />)}
+                            </Box>
+                        </Box>
+
+                        <Box sx={{ order: { xs: 3, md: 3 }, display: 'flex', width: { xs: '100%', md: '550px' }, minWidth: { md: '550px' }, maxWidth: { md: '550px' }, flexShrink: 0 }}>
+                            <CodeEditor
+                                title="Target (VQL)"
+                                borderColor={purple[500]}
+                                value={targetSql}
+                                readOnly={true}
+                                extensions={editorExtensions}
+                                loading={anyLoading}
+                            />
                         </Box>
                     </Box>
+                </Container>
 
-                    <Box sx={{ order: { xs: 3, md: 3 }, display: 'flex', width: { xs: '100%', md: '550px' }, minWidth: { md: '550px' }, maxWidth: { md: '550px' }, flexShrink: 0 }}>
-                        <CodeEditor
-                            title="Target (VQL)"
-                            borderColor={purple[500]}
-                            value={targetSql}
-                            readOnly={true}
-                            extensions={editorExtensions}
-                            loading={anyLoading}
-                        />
-                    </Box>
+                <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.2 -
+                        MIT License
+                    </a>
+                    </Typography>
                 </Box>
-            </Container>
-
-            <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.2 -
-                    MIT License
-                </a>
-                </Typography>
             </Box>
-        </Box>
+        </>
     );
 }
 

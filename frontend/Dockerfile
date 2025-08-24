@@ -31,6 +31,5 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Expose port 4999 for Nginx
 EXPOSE 4999
 
-# The wrapper script is no longer needed.
 # The original Nginx command is used directly.
 CMD ["nginx", "-g", "daemon off;"]

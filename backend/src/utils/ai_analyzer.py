@@ -1,3 +1,5 @@
+# src/utils/ai_analyzer.py
+
 import logging
 from typing import Type
 from sqlglot import exp, parse_one
@@ -155,3 +157,45 @@ async def analyze_sql_translation_error(exception_message: str, input_sql: str) 
         raise HTTPException(
             status_code=503, detail=f"AI service for translation unavailable or failed: {agent_error}"
         )
+
+
+async def explain_vql_differences(source_sql: str, source_dialect: str, final_vql: str) -> str:
+    """
+    Uses an AI agent to analyze and explain the differences between a source SQL query
+    and its translated VQL counterpart.
+    """
+    agent = _initialize_ai_agent(
+        "You are an expert in SQL dialects and Denodo VQL. Your task is to explain the differences between a source SQL query and its translated VQL counterpart.",
+        AIAnalysis
+    )
+
+    prompt = f"""Analyze the differences between the source SQL and the final VQL.
+                1.  In the `explanation` field, provide a concise, Markdown-formatted bulleted list (using '-') explaining the key transformations that were applied.
+                2.  Focus on syntax changes, function replacements, and structural modifications (like adding a database name to a table).
+                3.  Keep the explanation clear and easy for a developer to understand.
+                4.  If there are no significant changes, state that the VQL is a direct equivalent.
+                5.  Do not populate the `sql_suggestion` or `error_category` fields.
+
+                **Source SQL ({source_dialect}):**
+                ```sql
+                {source_sql}
+                ```
+
+                **Final VQL:**
+                ```vql
+                {final_vql}
+                ```
+                """
+    try:
+        response = await agent.run(prompt)
+        if response and response.output and response.output.explanation:
+            explanation_text = response.output.explanation
+            logger.info(f"AI VQL Diff Explanation generated: {explanation_text[:150]}...")
+            return explanation_text
+        else:
+            logger.error(f"AI agent returned unexpected response for VQL diff explanation: {response}")
+            return "AI analysis of the VQL differences failed to produce an explanation."
+    except Exception as agent_error:
+        logger.error(f"Error calling AI Agent for VQL diff explanation: {agent_error}", exc_info=True)
+        # Return a user-friendly error message, not the raw exception
+        return "An error occurred while generating the explanation of VQL differences."
