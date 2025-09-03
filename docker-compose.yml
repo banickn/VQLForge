@@ -36,7 +36,11 @@ services:
     user: appuser
     volumes:
       - ${HOST_PROJECT_PATH}/backend/vdb_conf.yaml:/opt/vdb_conf.yaml
+      - vqlforge-data:/data
 
 
     networks:
       - app_network
+
+volumes:
+  vqlforge-data:

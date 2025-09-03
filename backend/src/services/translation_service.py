@@ -1,3 +1,12 @@
+"""
+Core translation service for converting SQL to VQL.
+
+This module contains the primary logic for the SQL-to-VQL translation process,
+leveraging the `sqlglot` library for parsing and transformation. It also
+integrates with an AI service to analyze and provide suggestions for
+parsing errors.
+"""
+
 import logging
 from sqlglot import parse_one
 from sqlglot.errors import ParseError
@@ -12,8 +21,34 @@ logger = logging.getLogger(__name__)
 
 
 async def run_translation(source_sql: str, dialect: str, vdb: str) -> TranslateApiResponse:
-    """
-    Translates a source SQL string to VQL, handling errors and transformations.
+    """Translate a source SQL string to VQL, handling errors and transformations.
+
+    This function orchestrates the end-to-end translation process. It first
+    attempts to parse the source SQL using `sqlglot` according to the specified
+    dialect. If successful, it applies a series of transformations:
+    1.  Qualifies table names with the provided VDB, if any.
+    2.  Applies Oracle-specific transformations for `DUAL` functions.
+
+    If a `ParseError` occurs, it invokes an AI service to analyze the error
+    and the source SQL, aiming to provide a meaningful explanation and a
+    suggested fix.
+
+    Args:
+        source_sql: The raw SQL string to be translated.
+        dialect: The dialect of the source SQL (e.g., "oracle", "bigquery").
+        vdb: The name of the Virtual Database (VDB) to qualify table names with.
+             If empty, no VDB transformation is applied.
+
+    Returns:
+        An object containing either the successfully generated VQL string or
+        an `error_analysis` object with details from the AI service if parsing
+        failed. In case of a catastrophic failure, a simple error message is
+        returned.
+
+    Raises:
+        HTTPException: Re-raises any `HTTPException` that might occur during the
+                       AI analysis sub-process, allowing it to be propagated to
+                       the API layer.
     """
     logger.debug(f"Running translation: dialect='{dialect}', vdb='{vdb}', SQL='{source_sql[:100]}...'")
 

@@ -38,10 +38,12 @@ export const translateSql = async (requestBody) => {
     return response.json();
 };
 
-export const validateSql = async (sql, vql) => {
+export const validateSql = async (sql, vql, vdb, dialect) => {
     const validateRequestBody = {
         sql: sql,
-        vql: vql
+        vql: vql,
+        vdb: vdb,
+        dialect: dialect
     };
 
     const validateResponse = await fetch(`${API_BASE_URL}/api/validate`, {
@@ -137,4 +139,19 @@ export const forgeSql = async (requestBody, { onMessage, onError, onClose }) => 
     } finally {
         onClose();
     }
+};
+
+export const logAcceptedQuery = async (logData) => {
+    const response = await fetch(`${API_BASE_URL}/api/log/accepted`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(logData)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to log accepted query: ${errorText}`);
+    }
+
+    return response.json();
 };

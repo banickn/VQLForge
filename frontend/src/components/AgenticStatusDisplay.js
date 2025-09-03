@@ -90,7 +90,7 @@ function AgenticStatusDisplay({ currentStep, history }) {
                         <ThinkingDot />
                     </Box>
                 </Box>
-                <Chip label="Auto" size="small" sx={{ backgroundColor: '#444654', color: 'white' }} />
+
             </Box>
 
             <Box

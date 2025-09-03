@@ -36,7 +36,7 @@ RUN pip install --no-cache-dir uv
 
 # Create a non-root user and group
 RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup -d /app -s /sbin/nologin appuser
-
+RUN mkdir -p /data && chown -R appuser:appgroup /data
 WORKDIR /app
 
 # Copy dependency definition files and your submodule source code
