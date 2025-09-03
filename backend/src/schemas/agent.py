@@ -7,6 +7,7 @@ class AgenticModeRequest(BaseModel):
     sql: str = Field(..., example="SELECT count(*) AS total FROM some_view")
     dialect: str
     vdb: str
+    vql: str
 
 
 class AgentStep(BaseModel):

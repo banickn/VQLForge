@@ -1,8 +1,7 @@
-import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
-load_dotenv()  # Loads variables from .env file
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -16,11 +15,14 @@ class Settings(BaseSettings):
     AZURE_OPENAI_ENDPOINT: str
     AI_MODEL_NAME: str
 
-    DATABASE_URL: str | None = None  # Will be constructed
+    DATABASE_URL: str | None = None
     APP_VDB_CONF: str
 
-    # New setting for the agentic loop limit
+    # agentic loop limit
     AGENTIC_MAX_LOOPS: int = 3
+
+    # SQLite logging database
+    SQLITE_DB_PATH: str = "/data/vqlforge_log.db"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

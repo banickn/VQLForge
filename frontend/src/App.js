@@ -15,7 +15,7 @@ import { sql } from '@codemirror/lang-sql';
 import { purple, blueGrey } from '@mui/material/colors';
 
 // Import API Service
-import { fetchVdbs, translateSql, validateSql, forgeSql } from './apiService.js';
+import { fetchVdbs, translateSql, validateSql, forgeSql, logAcceptedQuery } from './apiService.js';
 
 // Import Custom Components
 import CodeEditor from './components/Editors/CodeEditor.js';
@@ -25,11 +25,11 @@ import AgenticLogDisplay from './components/AgenticLogDisplay.js';
 import { useToast, ToastContainer } from './components/Toast/Toast.js';
 
 
-// --- Import Alert Components ---
+// Import Alert Components
 import AiErrorAnalysis from './components/Alerts/AiErrorAnalysis.js';
 import AiValidationErrorAnalysis from './components/Alerts/AiValidationErrorAnalysis.js';
 
-// --- Configuration ---
+// Configuration
 const availableDialects = [{ value: 'athena', label: 'Athena' }, { value: 'bigquery', label: 'BigQuery' }, { value: 'clickhouse', label: 'ClickHouse' }, { value: 'databricks', label: 'Databricks' }, { value: 'doris', label: 'Doris' }, { value: 'drill', label: 'Drill' }, { value: 'druid', label: 'Druid' }, { value: 'duckdb', label: 'DuckDB' }, { value: 'dune', label: 'Dune' }, { value: 'hive', label: 'Hive' }, { value: 'materialize', label: 'Materialize' }, { value: 'mysql', label: 'MySQL' }, { value: 'oracle', label: 'Oracle' }, { value: 'postgres', label: 'PostgreSQL' }, { value: 'presto', label: 'Presto' }, { value: 'prql', label: 'PRQL' }, { value: 'redshift', label: 'Redshift' }, { value: 'risingwave', label: 'RisingWave' }, { value: 'snowflake', label: 'Snowflake' }, { value: 'spark', label: 'Spark SQL' }, { value: 'spark2', label: 'Spark SQL 2' }, { value: 'sqlite', label: 'SQLite' }, { value: 'starrocks', label: 'StarRocks' }, { value: 'tableau', label: 'Tableau' }, { value: 'teradata', label: 'Teradata' }, { value: 'trino', label: 'Trino' }];
 const editorExtensions = [sql()];
 const initialTargetSqlPlaceholder = '-- Target SQL will appear here after conversion...';
@@ -40,7 +40,7 @@ function App() {
     const toast = useToast();
     const [sourceDialect, setSourceDialect] = useState(availableDialects[0]);
 
-    // --- VDB State ---
+    // VDB State
     const [actualAvailableVDBs, setActualAvailableVDBs] = useState([]);
     const [selectedVDB, setSelectedVDB] = useState(null);
     const [vdbsLoading, setVdbsLoading] = useState(false);
@@ -52,7 +52,7 @@ function App() {
     const [error, setError] = useState(null);
     const [isValidating, setIsValidating] = useState(false);
     const [validationResult, setValidationResult] = useState(null);
-    // --- Agentic Mode State ---
+    // Agentic Mode State
     const [isAgenticModeActive, setIsAgenticModeActive] = useState(false);
     const [agenticStatusMessages, setAgenticStatusMessages] = useState([]);
     const [currentAgenticStep, setCurrentAgenticStep] = useState(null);
@@ -69,7 +69,7 @@ function App() {
         setShowFinalAgenticLog(false);
     };
 
-    // --- Fetch VDBs ---
+    // Fetch VDBs
     useEffect(() => {
         setVdbsLoading(true);
         setVdbsError(null);
@@ -199,18 +199,33 @@ function App() {
         }
 
         try {
-            const validationData = await validateSql(sourceSql, vqlWithoutLineBreaks);
+            const validationData = await validateSql(
+                sourceSql,
+                vqlWithoutLineBreaks,
+                selectedVDB.value,
+                sourceDialect.value
+            );
 
             if (validationData.validated) {
                 const message = validationData.message || `VQL syntax check successful!`;
 
-                // Enhanced toast with custom Accept/Refuse actions
                 const actions = [
                     {
                         label: 'Accept',
-                        onClick: () => {
+                        onClick: async () => {
+                            try {
+                                const logData = {
+                                    source_sql: sourceSql,
+                                    source_dialect: sourceDialect.value,
+                                    target_vql: targetSql
+                                };
+                                await logAcceptedQuery(logData);
+                                toast.info('Query pair saved successfully!', 'Saved');
+                            } catch (err) {
+                                console.error("Failed to log accepted query:", err);
+                                toast.error(err.message || 'Could not save the query to the log.', 'Logging Error');
+                            }
                             clearValidationState();
-                            console.log('Validation accepted by user');
                         },
                         primary: true
                     },
@@ -263,11 +278,15 @@ function App() {
         setCurrentAgenticStep(null);
         setShowFinalAgenticLog(false);
         setTargetSql(initialTargetSqlPlaceholder);
+        const initialVqlForForge = (targetSql === initialTargetSqlPlaceholder || targetSql === conversionErrorPlaceholder)
+            ? ""
+            : targetSql;
 
         const requestBody = {
             sql: sourceSql,
             dialect: sourceDialect.value,
             vdb: selectedVDB.value,
+            vql: initialVqlForForge,
         };
 
         const onMessage = ({ event, data }) => {
@@ -383,7 +402,9 @@ function App() {
                     }}
                 >
                     <Toolbar>
-                        <VqlForgeLogo sx={{ fontSize: '2rem', mr: 2 }} />
+                        <Box sx={{ width: '90px', height: '90px', mr: 1.5 }}>
+                            <VqlForgeLogo style={{ width: '100%', height: '100%' }} />
+                        </Box>
                         <Typography variant="h5" component="div" sx={{ fontWeight: 500, flexGrow: 1, color: 'white', letterSpacing: '0.08em' }}>
                             VQLForge
                         </Typography>
@@ -578,7 +599,7 @@ function App() {
                 </Container>
 
                 <Box component="footer" sx={{ height: '50px', px: 2, mt: 'auto', backgroundColor: blueGrey[50], borderTop: `1px solid ${theme.palette.divider}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.2 -
+                    <Typography variant="caption" color="text.secondary"><a href="https://github.com/banickn/VQLForge" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>VQLForge 0.25 -
                         MIT License
                     </a>
                     </Typography>

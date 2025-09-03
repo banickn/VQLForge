@@ -1,20 +1,34 @@
+"""Validates VQL queries against a Denodo server."""
+
 import logging
 import asyncio
 from fastapi import HTTPException
+import re
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError, SQLAlchemyError
 
-from src.schemas.validation import VqlValidationApiResponse
-from src.schemas.translation import AIAnalysis  # Import the unified error model
+from src.schemas.validation import VqlValidationApiResponse, VqlValidateRequest
+from src.schemas.translation import AIAnalysis
 from src.utils.ai_analyzer import analyze_vql_validation_error
 from src.db.session import get_engine
 
 logger = logging.getLogger(__name__)
 
 
-async def run_validation(vql_to_validate: str) -> VqlValidationApiResponse:
-    """
-    Validates a VQL query against the Denodo database.
+async def run_validation(request: VqlValidateRequest) -> VqlValidationApiResponse:
+    """Validates a VQL query using a `DESC QUERYPLAN` statement.
+
+    This check is run in a separate thread to avoid blocking. If validation
+    fails, an AI service is called to analyze the error.
+
+    Args:
+        request: The VQL and its original SQL context.
+
+    Returns:
+        A validation response, with AI analysis on failure.
+
+    Raises:
+        HTTPException: If the database connection is unavailable.
     """
     engine = get_engine()
     if engine is None:
@@ -22,10 +36,16 @@ async def run_validation(vql_to_validate: str) -> VqlValidationApiResponse:
             status_code=503,
             detail="Database connection is not available. Check server logs.",
         )
+    # DESC QUERYPLAN throws a syntax error when the query has LIMIT
+    limit_match = re.search(r"LIMIT\s+\d+", request.vql)
+    if limit_match:
+        vql_without_limit = request.vql[:limit_match.start()]
+        desc_query_plan_vql: str = f"DESC QUERYPLAN {vql_without_limit}"
+    else:
+        desc_query_plan_vql: str = f"DESC QUERYPLAN {request.vql}"
+    logger.info(f"Attempting to validate VQL (via DESC QUERYPLAN): {request.vql[:100]}...")
 
-    desc_query_plan_vql: str = f"DESC QUERYPLAN {vql_to_validate}"
-    logger.info(f"Attempting to validate VQL (via DESC QUERYPLAN): {vql_to_validate[:100]}...")
-
+    # This synchronous function is executed in a separate thread to prevent blocking.
     def db_call():
         try:
             with engine.connect() as connection:
@@ -47,15 +67,13 @@ async def run_validation(vql_to_validate: str) -> VqlValidationApiResponse:
                 message="VQL syntax check successful!",
             )
 
-        # Re-raise the exception caught in the thread
         raise result
 
     except (OperationalError, ProgrammingError) as e:
         db_error_message = str(getattr(e, "orig", e))
         logger.warning(f"Denodo VQL validation failed: {db_error_message}")
         try:
-            # The result is now correctly typed as AIAnalysis
-            ai_analysis_result: AIAnalysis = await analyze_vql_validation_error(db_error_message, vql_to_validate)
+            ai_analysis_result: AIAnalysis = await analyze_vql_validation_error(db_error_message, request)
             return VqlValidationApiResponse(
                 validated=False, error_analysis=ai_analysis_result
             )

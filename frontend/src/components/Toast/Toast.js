@@ -15,7 +15,7 @@ import {
 export const useToast = () => {
     const [toasts, setToasts] = useState([]);
 
-    const addToast = (message, severity = 'info', duration = 6000, title = '', actions = []) => {
+    const addToast = (message, severity = 'info', duration = 9000, title = '', actions = []) => {
         const id = Date.now() + Math.random();
         const newToast = {
             id,

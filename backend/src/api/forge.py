@@ -1,9 +1,19 @@
+"""
+API routes for the VQL Forge agentic process.
+
+This module provides a FastAPI endpoint for converting SQL to VQL in an
+iterative, agent-like process. It uses Server-Sent Events (SSE) to stream
+progress back to the client.
+"""
+
 import logging
 import json
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from src.schemas.validation import VqlValidationApiResponse
 from src.schemas.agent import AgenticModeRequest, AgenticModeResponse, AgentStep
+from src.schemas.validation import VqlValidateRequest
 from src.services.translation_service import run_translation
 from src.services.validation_service import run_validation
 from src.utils.ai_analyzer import explain_vql_differences
@@ -14,7 +24,15 @@ router = APIRouter()
 
 
 async def format_sse(data: dict, event: str | None = None) -> str:
-    """Formats a dictionary into an SSE message string."""
+    """Format a dictionary into a Server-Sent Event (SSE) message string.
+
+    Args:
+        data: The dictionary payload to send.
+        event: An optional event name for the SSE message.
+
+    Returns:
+        A string formatted as a compliant SSE message.
+    """
     payload = json.dumps(data)
     if event:
         return f"event: {event}\ndata: {payload}\n\n"
@@ -22,9 +40,17 @@ async def format_sse(data: dict, event: str | None = None) -> str:
 
 
 def format_explanation_as_markdown(explanation: str) -> str:
-    """
-    Formats the AI explanation into better structured markdown.
-    This assumes the explanation comes as structured text that we can enhance.
+    """Format the AI explanation into better structured markdown.
+
+    This function enhances a plain text explanation by attempting to structure
+    it as markdown. If markdown markers like '##' or '-' are already present,
+    it returns the original string to avoid double formatting.
+
+    Args:
+        explanation: The raw explanation string from the AI.
+
+    Returns:
+        A markdown-formatted explanation string.
     """
     if not explanation:
         return explanation
@@ -49,10 +75,19 @@ def format_explanation_as_markdown(explanation: str) -> str:
 
 
 @router.post("/forge", tags=["VQL Forge"])
-async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
-    """
-    Handles the agentic SQL-to-VQL process using a streaming response (SSE)
-    to provide real-time updates of the agent's progress with a limited number of correction loops.
+async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest,) -> StreamingResponse:
+    """Handle the agentic SQL-to-VQL process via a streaming response.
+
+    This endpoint uses Server-Sent Events (SSE) to provide real-time updates
+    of the agent's progress. The process involves an initial translation,
+    followed by a series of validation and correction loops until the VQL is
+    valid or the maximum number of attempts is reached.
+
+    Args:
+        request: The request containing the SQL query, its dialect, and the VDB.
+
+    Returns:
+        A StreamingResponse that sends SSE events to the client.
     """
     async def event_generator():
         process_log: list[AgentStep] = []
@@ -93,7 +128,9 @@ async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
                 process_log.append(validation_step)
                 yield await format_sse(validation_step.model_dump(), event="step")
 
-                validation_result = await run_validation(current_vql)
+                validation_request: VqlValidateRequest = VqlValidateRequest(
+                    sql=request.sql, vql=current_vql, vdb=request.vdb, dialect=request.dialect)
+                validation_result: VqlValidationApiResponse = await run_validation(validation_request)
 
                 if validation_result.validated:
                     validation_step.details = "Validation successful."
@@ -117,7 +154,6 @@ async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
                     # Format the explanation with better structure
                     formatted_explanation = format_explanation_as_markdown(raw_explanation)
 
-                    # Add a header to make it clearer
                     final_explanation = f"## Key Differences Between Source SQL and Final VQL\n\n{formatted_explanation}"
 
                     explain_step.details = final_explanation
@@ -175,7 +211,7 @@ async def agentic_sql_to_vql_forge_stream(request: AgenticModeRequest):
                 process_log.append(correction_step)
                 yield await format_sse(correction_step.model_dump(), event="step")
 
-                current_vql = error_analysis.sql_suggestion  # Update VQL for the next loop
+                current_vql = error_analysis.sql_suggestion
 
         except Exception as e:
             logger.error(f"Error during agentic stream: {e}", exc_info=True)

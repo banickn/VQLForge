@@ -2,14 +2,14 @@ import logging
 import asyncio
 from fastapi import HTTPException
 from sqlalchemy import Engine, text
-from src.db.session import get_engine  # Use the centralized engine
+from src.db.session import get_engine
 
 logger = logging.getLogger(__name__)
 
 
 async def get_available_views_from_denodo(vdb_name: str | None = None) -> list[str]:
     engine: Engine = get_engine()
-    vql = "SELECT database_name, name FROM get_views()"
+    vql = f"SELECT database_name, name FROM get_views() where input_database_name = '{vdb_name}'"
 
     def db_call():
         try:
@@ -29,10 +29,10 @@ async def get_available_views_from_denodo(vdb_name: str | None = None) -> list[s
 
 
 async def get_denodo_functions_list() -> list[str]:
-    engine = get_engine()
+    engine: Engine = get_engine()
     vql = "LIST FUNCTIONS"
 
-    def db_call():
+    def db_call() -> list[str]:
         try:
             with engine.connect() as connection:
                 result = connection.execute(text(vql))
@@ -50,7 +50,7 @@ async def get_denodo_functions_list() -> list[str]:
 
 
 async def get_vdb_names_list() -> list[str]:
-    engine = get_engine()
+    engine: Engine = get_engine()
     vql = "SELECT db_name FROM GET_DATABASES()"
 
     def db_call():
@@ -75,16 +75,16 @@ async def get_view_cols(tables: list[str]) -> list[dict[str, str]]:
         logger.info("No tables provided to get_view_cols, returning empty list.")
         return []
 
-    engine = get_engine()
+    engine: Engine = get_engine()
     tables_in_clause: str = ",".join(f"'{s}'" for s in tables)
     vql: str = f"select view_name, column_name, column_sql_type from GET_view_columns() where view_name in ({tables_in_clause})"
 
-    def db_call():
+    def db_call() -> list[dict[str, str]]:
         try:
             with engine.connect() as connection:
                 result = connection.execute(text(vql))
                 column_details: list[dict[str, str]] = [dict(row._mapping) for row in result]
-                logger.info(f"Successfully retrieved view cols")
+                logger.info("Successfully retrieved view cols")
                 return column_details
         except Exception as e:
             logger.error(f"Error executing VQL query '{vql}' to get view columns: {e}", exc_info=True)

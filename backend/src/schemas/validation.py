@@ -6,6 +6,8 @@ from src.schemas.translation import AIAnalysis  # Use the unified error model
 class VqlValidateRequest(BaseModel):
     sql: str  # The original SQL, for context if needed
     vql: str  # The VQL to validate
+    vdb: str
+    dialect: str
 
 
 class VqlValidationApiResponse(BaseModel):
